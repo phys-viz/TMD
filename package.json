@@ -1,0 +1,13 @@
+{
+  "name": "tmd-skyscraper-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser prototype for a tuned mass damper skyscraper lab and classroom city challenge.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/physics.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

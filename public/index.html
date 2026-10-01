@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tuned Mass Damper Skyscraper Lab</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Tuned Mass Damper Lab</h1>
+      <p>Measure a tower's natural period, tune a pendulum damper, and watch pulse-started free motion settle.</p>
+    </div>
+    <nav class="tabs" aria-label="Views">
+      <button class="tab active" data-view="lab">Solo Lab</button>
+      <button class="tab" data-view="student">Student</button>
+      <button class="tab" data-view="teacher">Teacher</button>
+      <button class="tab" data-view="city">City</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="lab" class="view active">
+      <div class="workbench">
+        <aside class="panel controls">
+          <div class="control-head">
+            <h2>Experiment</h2>
+            <button id="newTowerBtn">New tower</button>
+          </div>
+          <label>Seed <input id="seedInput" value="freshman-lab"></label>
+          <div class="readout compact" id="towerReadout"></div>
+          <div class="control-block">
+            <h3>Pulse</h3>
+            <div class="field-row two">
+              <label>Size (m)<input id="ampInput" type="number" min="0.08" max="0.6" step="0.02" value="0.34"><span class="limit">0.08 to 0.60</span></label>
+              <label>Time (s)<input id="pulseInput" type="number" min="0.8" max="3.2" step="0.1" value="1.8"><span class="limit">0.8 to 3.2</span></label>
+            </div>
+            <div class="mode-row" aria-label="Difficulty mode">
+              <label><input type="radio" name="difficultyMode" value="easy"> Easy</label>
+              <label><input type="radio" name="difficultyMode" value="medium" checked> Medium</label>
+              <label><input type="radio" name="difficultyMode" value="hard"> Hard</label>
+            </div>
+            <label class="check"><input id="showDangerInput" type="checkbox" checked> Show danger zone</label>
+            <div class="button-row run-row">
+              <button id="playBtn">Play pulse</button>
+              <button id="pauseBtn">Pause</button>
+              <button id="resetBtn">Reset</button>
+            </div>
+          </div>
+          <div class="control-block">
+            <h3>Damper</h3>
+            <label class="check"><input id="damperEnabled" type="checkbox" checked> Install TMD</label>
+            <div class="field-row three">
+              <label>Length<input id="lengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4"><span class="limit">m: 0.7-18</span></label>
+              <label>Mass<input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5"><span class="limit">%: 1-10</span></label>
+              <label>Damping<input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0.45"><span class="limit">0 none, 1 locked</span></label>
+            </div>
+          </div>
+          <details>
+            <summary>Model notes</summary>
+            <p>A short ground pulse starts the tower moving. After that, the foundation stops and the graph shows free motion. Sway means roof displacement relative to the foundation, x - y.</p>
+            <p class="formula">T = 2*pi*sqrt(L/g) and L = g*(T/2*pi)^2</p>
+            <p>Two hydraulic dampers remove mechanical energy from pendulum motion. The thermal energy readout is cumulative dissipated energy. At zero damping, the hydraulic dampers are removed.</p>
+            <p>Wall impacts use a simple restitution model: the bob is placed at the wall and its angular velocity reverses with reduced speed.</p>
+            <p>Failure rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the pulse and builds while roof sway is beyond 0.20 m.</p>
+          </details>
+        </aside>
+        <section class="sim-area">
+          <div class="stage-wrap">
+            <canvas id="stage" width="420" height="700"></canvas>
+            <div class="status-strip" id="metrics"></div>
+          </div>
+          <div class="graph-wrap">
+            <div class="graph-tools">
+              <label>Graph start<input id="graphStartInput" type="number" min="0" max="120" step="0.5" value="0"></label>
+              <label>Graph end<input id="graphEndInput" type="number" min="1" max="120" step="0.5" value="24"></label>
+              <button id="graphLatestBtn" type="button">Latest</button>
+              <button id="graphFullBtn" type="button">Full</button>
+            </div>
+            <canvas id="graph" width="560" height="620"></canvas>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="student" class="view">
+      <div class="two-col">
+        <form id="joinForm" class="panel">
+          <h2>Join Challenge</h2>
+          <label>Room code <input id="studentRoom" autocomplete="off" maxlength="8"></label>
+          <label>Nickname <input id="nickname" autocomplete="off" maxlength="24" value="Student"></label>
+          <button>Join / reconnect</button>
+          <p id="studentState" class="muted"></p>
+        </form>
+        <form id="submitForm" class="panel">
+          <h2>Submit Design</h2>
+          <div id="studentTower" class="readout">Join a room to receive a tower.</div>
+          <label>Pendulum length (m)<input id="submitLength" type="number" min="0.7" max="18" step="0.05"></label>
+          <label>Mass ratio<input id="submitMass" type="number" min="0.01" max="0.10" step="0.005"></label>
+          <label>Damping<input id="submitDamping" type="number" min="0" max="1" step="0.01"></label>
+          <button>Submit / revise before lock</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="teacher" class="view">
+      <div class="two-col">
+        <form id="roomForm" class="panel">
+          <h2>Create Room</h2>
+          <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
+          <label>Design minutes <input id="designMinutes" type="number" value="12" min="1" max="60"></label>
+          <label>Pulse size (m)<input id="roomAmp" type="number" value="0.42" min="0.1" max="0.8" step="0.02"></label>
+          <label>Pulse duration (s)<input id="roomPulse" type="number" value="1.8" min="0.8" max="3.2" step="0.1"></label>
+          <label>Difficulty
+            <select id="roomDifficulty">
+              <option value="easy">Easy: no danger zone</option>
+              <option value="medium" selected>Medium: 3.0 s danger</option>
+              <option value="hard">Hard: 2.5 s danger</option>
+            </select>
+          </label>
+          <label>Run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
+          <label>Sway limit (m)<input id="driftLimit" type="number" value="1.2" min="0.3" max="3" step="0.05"></label>
+          <button>Create room</button>
+        </form>
+        <div class="panel">
+          <h2>Teacher Controls</h2>
+          <div id="roomState" class="readout">No room yet.</div>
+          <div class="button-row">
+            <button id="lockBtn">Lock</button>
+            <button id="startBtn">Start pulse</button>
+            <button id="replayBtn">Replay</button>
+          </div>
+          <table id="roster"><thead><tr><th>Name</th><th>Tower T</th><th>Submitted</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section id="city" class="view">
+      <div class="city-head">
+        <div>
+          <h2>City Challenge</h2>
+          <p id="cityCaption">Create or join a room to see the shared skyline.</p>
+        </div>
+        <div id="quakeBadge" class="badge">Waiting</div>
+      </div>
+      <canvas id="cityCanvas" width="1100" height="480"></canvas>
+      <div class="panel">
+        <h2>Results</h2>
+        <table id="resultsTable"><thead><tr><th>Rank</th><th>Name</th><th>Status</th><th>Settling</th><th>Peak sway</th><th>Wall hits</th><th>Thermal energy</th><th>Design</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/physics.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
