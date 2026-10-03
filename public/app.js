@@ -12,6 +12,9 @@ let lastCityStartedAt = 0;
 let graphCursors = [];
 
 const RUN_DURATION = 120;
+const EARTHQUAKE_DURATION = P.earthquakeDuration;
+const EARTHQUAKE_STRENGTHS = P.earthquakeStrengths;
+const HYDRAULIC_BODY_PX = 44;
 const DANGER_SWAY = 0.2;
 const DIFFICULTY = {
   easy: { label: "Easy", dangerEnabled: false, collapseSway: DANGER_SWAY, collapseTime: 3 },
@@ -36,8 +39,8 @@ function setGraphRange(start, end) {
   const runDuration = sim?.pulse?.runDuration || RUN_DURATION;
   const cleanStart = P.clamp(Number(start) || 0, 0, runDuration - 0.5);
   const cleanEnd = P.clamp(Number(end) || 24, cleanStart + 0.5, runDuration);
-  $("graphStartInput").value = fmt(cleanStart, 1);
-  $("graphEndInput").value = fmt(cleanEnd, 1);
+  $("graphStartInput").value = fmt(cleanStart, 2);
+  $("graphEndInput").value = fmt(cleanEnd, 2);
 }
 
 function graphRange() {
@@ -58,15 +61,33 @@ function selectedDifficulty() {
   return { mode: selected, ...DIFFICULTY[selected] };
 }
 
+function selectedEarthquakeAmplitude(groupId) {
+  const strength = $(groupId).querySelector('button[aria-pressed="true"]').dataset.strength;
+  return EARTHQUAKE_STRENGTHS[strength];
+}
+
+["earthquakeStrength", "roomStrength"].forEach(groupId => {
+  const group = $(groupId);
+  group.querySelectorAll("button").forEach(button => {
+    button.addEventListener("click", () => {
+      if (button.getAttribute("aria-pressed") === "true") return;
+      group.querySelectorAll("button").forEach(choice => {
+        choice.setAttribute("aria-pressed", String(choice === button));
+      });
+      if (groupId === "earthquakeStrength") resetLab();
+    });
+  });
+});
+
 function pulseFromLab() {
   const difficulty = selectedDifficulty();
   return {
-    amplitude: inputNumber("ampInput", 0.34),
-    duration: inputNumber("pulseInput", 1.8),
+    amplitude: selectedEarthquakeAmplitude("earthquakeStrength"),
+    duration: EARTHQUAKE_DURATION,
     difficulty: difficulty.mode,
     driftLimit: 1.2,
     dangerEnabled: difficulty.dangerEnabled,
-    collapseSway: difficulty.collapseSway,
+    collapseSway: labTower.dangerSwayLimit ?? difficulty.collapseSway,
     collapseTime: difficulty.collapseTime,
     runDuration: RUN_DURATION
   };
@@ -113,6 +134,7 @@ function updateLabels() {
   $("towerReadout").innerHTML = `
     <strong>${labTower.name}</strong><br>
     Height ${labTower.height} m; mass ${(labTower.mass / 1e6).toFixed(1)} million kg<br>
+    Game sway limit: ${fmt(labTower.dangerSwayLimit ?? DANGER_SWAY)} m<br>
     Measure natural period from the free-motion peaks.<br>
     Reference after measuring: <button type="button" id="revealPeriodBtn">Reveal</button>
     <span id="periodSecret" hidden>${fmt(labTower.period)} s; tuned length ${fmt(predicted)} m</span>
@@ -140,7 +162,7 @@ function stepLive(dt) {
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
   const dangerDt = Math.max(0, sim.state.t - Math.max(previousT, sim.pulse.duration));
   if (dangerEnabled && Math.abs(sample.sway) > sim.pulse.collapseSway) sim.overLimitTime += dangerDt;
-  if (dangerEnabled && !sim.failed && sim.overLimitTime > sim.pulse.collapseTime) {
+  if (dangerEnabled && !sim.failed && P.dangerLimitReached(sim.overLimitTime, sim.pulse)) {
     sim.failed = true;
     sim.failedAt = sim.state.t;
     sim.playing = false;
@@ -184,7 +206,7 @@ function drawHydraulicDamper(ctx, anchorX, anchorY, bobX, bobY, bobR, side, warm
   const ux = dx / dist;
   const uy = dy / dist;
   const mountDepth = 14;
-  const cylinderLen = Math.min(44, Math.max(22, dist * 0.42));
+  const cylinderLen = HYDRAULIC_BODY_PX; // Rigid housing; only the piston rod changes length.
   const rodEndX = bobX - ux * (bobR + 3);
   const rodEndY = bobY - uy * (bobR + 3);
   const cylinderEndX = anchorX + ux * cylinderLen;
@@ -206,7 +228,7 @@ function drawHydraulicDamper(ctx, anchorX, anchorY, bobX, bobY, bobR, side, warm
   ctx.strokeStyle = warmColor;
   ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.moveTo(anchorX + side * 2, anchorY);
+  ctx.moveTo(anchorX, anchorY);
   ctx.lineTo(cylinderEndX, cylinderEndY);
   ctx.stroke();
 
@@ -493,13 +515,24 @@ function drawStage(sample) {
     const Lpx = P.clamp(d.length * 13, 45, 190);
     const bobR = P.clamp(9 + d.massRatio * 190, 11, 23);
     const drawTheta = P.clamp(sample.theta * 3.35, -1.05, 1.05);
+    const isLocked = d.damping >= 0.999;
+    const showHydraulics = d.damping > 0.001 && !isLocked;
+    const wallOffset = towerWidth / 2 - 12;
+    const anchorDrop = Math.sqrt(Math.max(0, Lpx * Lpx - wallOffset * wallOffset));
+    const anchorY = P.clamp(pivotY + anchorDrop, top + 60, bottom - 42);
+    const leftAnchorX = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, anchorY) + 4;
+    const rightAnchorX = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, anchorY) - 4;
     const maxBobOffset = towerWidth / 2 - bobR - 12;
-    const drawOffset = P.clamp(Math.sin(drawTheta) * Lpx, -maxBobOffset, maxBobOffset);
+    let drawOffset = P.clamp(Math.sin(drawTheta) * Lpx, -maxBobOffset, maxBobOffset);
+    if (showHydraulics) {
+      // Reserve housing and piston clearance in the schematic cutaway so the bob
+      // never hides the rigid cylinder or pushes the rod back through its end.
+      const clearance = bobR + HYDRAULIC_BODY_PX + 8;
+      drawOffset = P.clamp(drawOffset, leftAnchorX + clearance - pivotX, rightAnchorX - clearance - pivotX);
+    }
     const bobX = pivotX + drawOffset;
     const bobY = pivotY + Math.sqrt(Math.max(0, Lpx * Lpx - drawOffset * drawOffset));
     const warmColor = strutHeatColor(sample.heat, sim.energyScale);
-    const isLocked = d.damping >= 0.999;
-    const showHydraulics = d.damping > 0.001 && !isLocked;
 
     ctx.strokeStyle = "#1e2d36";
     ctx.lineWidth = 2;
@@ -510,11 +543,7 @@ function drawStage(sample) {
     ctx.stroke();
 
     if (showHydraulics || isLocked) {
-      const wallOffset = towerWidth / 2 - 12;
-      const anchorDrop = Math.sqrt(Math.max(0, Lpx * Lpx - wallOffset * wallOffset));
-      const anchorY = P.clamp(pivotY + anchorDrop, top + 60, bottom - 42);
-      const leftAnchorX = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, anchorY) + 4;
-      const rightAnchorX = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, anchorY) - 4;
+
       if (isLocked) {
         drawLockBrace(ctx, leftAnchorX, anchorY, bobX, bobY, bobR);
         drawLockBrace(ctx, rightAnchorX, anchorY, bobX, bobY, bobR);
@@ -605,8 +634,8 @@ function drawGraph() {
   ctx.fillText("roof sway relative to foundation", plot.left, 18);
   ctx.fillText(`${fmt(maxY)} m`, 6, plot.top + 4);
   ctx.fillText(`-${fmt(maxY)} m`, 6, plot.bottom);
-  ctx.fillText(`${fmt(tMin, 1)} s`, plot.left, h - 16);
-  ctx.fillText(`${fmt(tMax, 1)} s`, plot.right - 46, h - 16);
+  ctx.fillText(`${fmt(tMin, 2)} s`, plot.left, h - 16);
+  ctx.fillText(`${fmt(tMax, 2)} s`, plot.right - 62, h - 16);
 
   graphCursors = graphCursors.filter(t => t >= tMin && t <= tMax);
   graphCursors.forEach((t, idx) => {
@@ -634,11 +663,17 @@ function renderLab() {
   const sample = P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse);
   drawStage(sample);
   drawGraph();
+  $("earthquakeStatus").textContent = sample.t === 0 ? "A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops." : sample.t < sim.pulse.duration ? "Earthquake in progress: the ground is shaking." : "Ground stopped: measure the building's period now. Turn the TMD off to measure its natural period.";
   const measured = measuredPeriod(sim.samples);
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
-  const dangerText = dangerEnabled ? `${fmt(sim.overLimitTime, 1)} / ${fmt(sim.pulse.collapseTime, 1)} s` : "Off";
+  const dangerToggle = $("showDangerInput");
+  dangerToggle.disabled = !dangerEnabled;
+  dangerToggle.title = dangerEnabled ? "" : "Easy mode has no danger zone.";
+  // Show completed hundredths so the display cannot round up to the failure limit.
+  const dangerHundredths = Math.floor((Math.min(sim.overLimitTime, sim.pulse.collapseTime) + 1e-9) * 100) / 100;
+  const dangerText = dangerEnabled ? `${fmt(dangerHundredths, 2)} / ${fmt(sim.pulse.collapseTime, 2)} s` : "Off";
   $("metrics").innerHTML = [
-    metric("Time", `${fmt(sample.t, 1)} s`),
+    metric("Time", `${fmt(sample.t, 2)} s`),
     metric("Danger", dangerText),
     metric("Thermal energy", `${fmt(sample.heat / 1000, 1)} kJ`),
     metric(sim.failed ? "Status" : "Hits", sim.failed ? "Failed" : `${sample.hits}`)
@@ -689,7 +724,7 @@ function escapeHtml(str) {
 function renderRoom() {
   if (!currentRoom) return;
   const roomMode = DIFFICULTY[currentRoom.config.difficulty]?.label || "Medium";
-  $("roomState").innerHTML = `<strong>Room ${currentRoom.code}</strong><br>Phase: ${currentRoom.phase}<br>Mode: ${roomMode}<br>Pulse: ${fmt(currentRoom.config.amplitude)} m for ${fmt(currentRoom.config.pulseDuration)} s<br>Students: ${currentRoom.students.length}`;
+  $("roomState").innerHTML = `<strong>Room ${currentRoom.code}</strong><br>Phase: ${currentRoom.phase}<br>Mode: ${roomMode}<br>Earthquake: ${fmt(currentRoom.config.amplitude)} m for ${fmt(currentRoom.config.pulseDuration)} s<br>Students: ${currentRoom.students.length}`;
   $("studentState").textContent = `Room ${currentRoom.code}: ${currentRoom.phase}`;
   $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td>${escapeHtml(s.nickname)}</td><td>${fmt(s.tower.period)} s</td><td>${s.submission ? "yes" : "no"}</td></tr>`).join("");
   if (!currentStudent) return;
@@ -697,7 +732,7 @@ function renderRoom() {
   if (!latest) return;
   currentStudent = latest;
   const tuned = P.g * Math.pow(latest.tower.period / (2 * Math.PI), 2);
-  $("studentTower").innerHTML = `<strong>${escapeHtml(latest.tower.name)}</strong><br>Height ${latest.tower.height} m; mass ${(latest.tower.mass / 1e6).toFixed(1)} million kg<br>Natural period ${fmt(latest.tower.period)} s; calculated length ${fmt(tuned)} m<br>Submission: ${latest.submission ? `L ${fmt(latest.submission.length)} m, D ${fmt(latest.submission.damping)}` : "not submitted"}`;
+  $("studentTower").innerHTML = `<strong>${escapeHtml(latest.tower.name)}</strong><br>Height ${latest.tower.height} m; mass ${(latest.tower.mass / 1e6).toFixed(1)} million kg<br>Natural period ${fmt(latest.tower.period)} s; calculated length ${fmt(tuned)} m<br>Game sway limit ${fmt(latest.tower.dangerSwayLimit ?? DANGER_SWAY)} m<br>Submission: ${latest.submission ? `L ${fmt(latest.submission.length)} m, D ${fmt(latest.submission.damping)}` : "not submitted"}`;
   if (!$("submitLength").value) {
     const d = P.defaultDamperFor(latest.tower);
     $("submitLength").value = fmt(d.length);
@@ -723,7 +758,7 @@ function renderCity() {
     cityStart = performance.now() - Math.max(0, Date.now() - pulse.startedAt);
     lastCityStartedAt = pulse.startedAt;
   }
-  $("cityCaption").textContent = `Room ${currentRoom.code}: same pulse for every tower.`;
+  $("cityCaption").textContent = `Room ${currentRoom.code}: same earthquake for every tower.`;
   $("quakeBadge").textContent = pulse ? `${DIFFICULTY[pulse.difficulty]?.label || "Medium"}: ${fmt(pulse.amplitude)} m` : "Waiting";
   const t = currentRoom.phase === "running" ? ((performance.now() - cityStart) / 1000) % (pulse?.runDuration || RUN_DURATION) : 0;
   const cell = w / Math.max(1, students.length);
@@ -770,7 +805,7 @@ function renderCity() {
     ctx.fillText(s.nickname.slice(0, 12), cx, h - 14);
   });
 
-  $("resultsTable").querySelector("tbody").innerHTML = (currentRoom.results || []).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.nickname)}</td><td>${r.result.status}</td><td>${fmt(r.result.settleTime, 1)} s</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}</td></tr>`).join("");
+  $("resultsTable").querySelector("tbody").innerHTML = (currentRoom.results || []).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.nickname)}</td><td>${r.result.status}</td><td>${fmt(r.result.settleTime, 2)} s</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}</td></tr>`).join("");
 }
 
 function animateCity() {
@@ -778,7 +813,7 @@ function animateCity() {
   requestAnimationFrame(animateCity);
 }
 
-["ampInput", "pulseInput", "lengthInput", "massInput", "dampingInput", "damperEnabled"].forEach(id => {
+["lengthInput", "massInput", "dampingInput", "damperEnabled"].forEach(id => {
   $(id).addEventListener("input", () => {
     updateLabels();
     resetLab();
@@ -788,8 +823,6 @@ document.querySelectorAll('input[name="difficultyMode"]').forEach(input => {
   input.addEventListener("change", () => resetLab());
 });
 [
-  ["ampInput", 2],
-  ["pulseInput", 1],
   ["lengthInput", 2],
   ["massInput", 1],
   ["dampingInput", 2]
@@ -857,8 +890,8 @@ $("roomForm").addEventListener("submit", async event => {
   currentRoom = await api("/api/rooms", {
     seed: $("roomSeed").value,
     designMinutes: Number($("designMinutes").value),
-    amplitude: Number($("roomAmp").value),
-    pulseDuration: Number($("roomPulse").value),
+    amplitude: selectedEarthquakeAmplitude("roomStrength"),
+    pulseDuration: EARTHQUAKE_DURATION,
     difficulty: $("roomDifficulty").value,
     runDuration: Number($("roomRunDuration").value),
     driftLimit: Number($("driftLimit").value)

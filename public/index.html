@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=control-panels-3">
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>Tuned Mass Damper Lab</h1>
-      <p>Measure a tower's natural period, tune a pendulum damper, and watch pulse-started free motion settle.</p>
+      <p>Measure a tower's natural period, tune a pendulum damper, and watch the tower settle after an earthquake.</p>
     </div>
     <nav class="tabs" aria-label="Views">
       <button class="tab active" data-view="lab">Solo Lab</button>
@@ -30,26 +30,32 @@
           </div>
           <label>Seed <input id="seedInput" value="freshman-lab"></label>
           <div class="readout compact" id="towerReadout"></div>
-          <div class="control-block">
-            <h3>Pulse</h3>
-            <div class="field-row two">
-              <label>Size (m)<input id="ampInput" type="number" min="0.08" max="0.6" step="0.02" value="0.34"><span class="limit">0.08 to 0.60</span></label>
-              <label>Time (s)<input id="pulseInput" type="number" min="0.8" max="3.2" step="0.1" value="1.8"><span class="limit">0.8 to 3.2</span></label>
+          <div class="control-block earthquake-controls" role="group" aria-labelledby="earthquakeHeading">
+            <h3 id="earthquakeHeading">Earthquake</h3>
+            <div id="earthquakeStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
+              <button type="button" data-strength="gentle" aria-pressed="false">Gentle</button>
+              <button type="button" data-strength="moderate" aria-pressed="true">Moderate</button>
+              <button type="button" data-strength="strong" aria-pressed="false">Strong</button>
             </div>
+            <div class="button-row run-row">
+              <button id="playBtn">Start earthquake</button>
+              <button id="pauseBtn">Pause</button>
+              <button id="resetBtn">Reset</button>
+            </div>
+            <p class="muted" id="earthquakeStatus" role="status">A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops.</p>
+          </div>
+          <div class="control-block difficulty-controls" role="group" aria-labelledby="difficultyHeading">
+            <h3 id="difficultyHeading">Difficulty</h3>
             <div class="mode-row" aria-label="Difficulty mode">
               <label><input type="radio" name="difficultyMode" value="easy"> Easy</label>
               <label><input type="radio" name="difficultyMode" value="medium" checked> Medium</label>
               <label><input type="radio" name="difficultyMode" value="hard"> Hard</label>
             </div>
             <label class="check"><input id="showDangerInput" type="checkbox" checked> Show danger zone</label>
-            <div class="button-row run-row">
-              <button id="playBtn">Play pulse</button>
-              <button id="pauseBtn">Pause</button>
-              <button id="resetBtn">Reset</button>
-            </div>
+
           </div>
-          <div class="control-block">
-            <h3>Damper</h3>
+          <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
+            <h3 id="tmdHeading">TMD</h3>
             <label class="check"><input id="damperEnabled" type="checkbox" checked> Install TMD</label>
             <div class="field-row three">
               <label>Length<input id="lengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4"><span class="limit">m: 0.7-18</span></label>
@@ -59,11 +65,11 @@
           </div>
           <details>
             <summary>Model notes</summary>
-            <p>A short ground pulse starts the tower moving. After that, the foundation stops and the graph shows free motion. Sway means roof displacement relative to the foundation, x - y.</p>
+            <p>A simplified 3.0-second earthquake shakes the ground and starts the tower moving. After that, the foundation stops and the graph shows free motion. Sway means roof displacement relative to the foundation, x - y.</p>
             <p class="formula">T = 2*pi*sqrt(L/g) and L = g*(T/2*pi)^2</p>
             <p>Two hydraulic dampers remove mechanical energy from pendulum motion. The thermal energy readout is cumulative dissipated energy. At zero damping, the hydraulic dampers are removed.</p>
             <p>Wall impacts use a simple restitution model: the bob is placed at the wall and its angular velocity reverses with reduced speed.</p>
-            <p>Failure rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the pulse and builds while roof sway is beyond 0.20 m.</p>
+            <p>Failure rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the earthquake and builds while roof sway is beyond the tower's game sway limit, shown above. This tolerance varies by tower to keep challenges achievable; it is not a real structural prediction.</p>
           </details>
         </aside>
         <section class="sim-area">
@@ -73,8 +79,8 @@
           </div>
           <div class="graph-wrap">
             <div class="graph-tools">
-              <label>Graph start<input id="graphStartInput" type="number" min="0" max="120" step="0.5" value="0"></label>
-              <label>Graph end<input id="graphEndInput" type="number" min="1" max="120" step="0.5" value="24"></label>
+              <label>Graph start<input id="graphStartInput" type="number" min="0" max="120" step="0.01" value="0"></label>
+              <label>Graph end<input id="graphEndInput" type="number" min="1" max="120" step="0.01" value="24"></label>
               <button id="graphLatestBtn" type="button">Latest</button>
               <button id="graphFullBtn" type="button">Full</button>
             </div>
@@ -110,8 +116,12 @@
           <h2>Create Room</h2>
           <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
           <label>Design minutes <input id="designMinutes" type="number" value="12" min="1" max="60"></label>
-          <label>Pulse size (m)<input id="roomAmp" type="number" value="0.42" min="0.1" max="0.8" step="0.02"></label>
-          <label>Pulse duration (s)<input id="roomPulse" type="number" value="1.8" min="0.8" max="3.2" step="0.1"></label>
+          <div id="roomStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
+              <button type="button" data-strength="gentle" aria-pressed="false">Gentle</button>
+              <button type="button" data-strength="moderate" aria-pressed="true">Moderate</button>
+              <button type="button" data-strength="strong" aria-pressed="false">Strong</button>
+            </div>
+          <p class="muted">Ground shaking lasts 3.0 seconds.</p>
           <label>Difficulty
             <select id="roomDifficulty">
               <option value="easy">Easy: no danger zone</option>
@@ -128,7 +138,7 @@
           <div id="roomState" class="readout">No room yet.</div>
           <div class="button-row">
             <button id="lockBtn">Lock</button>
-            <button id="startBtn">Start pulse</button>
+            <button id="startBtn">Start earthquake</button>
             <button id="replayBtn">Replay</button>
           </div>
           <table id="roster"><thead><tr><th>Name</th><th>Tower T</th><th>Submitted</th></tr></thead><tbody></tbody></table>
@@ -152,7 +162,7 @@
     </section>
   </main>
 
-  <script src="/physics.js"></script>
-  <script src="/app.js"></script>
+  <script src="/physics.js?v=earthquake-calibration-3"></script>
+  <script src="/app.js?v=balanced-towers-3"></script>
 </body>
 </html>

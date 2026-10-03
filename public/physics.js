@@ -5,6 +5,8 @@
   const g = 9.81;
   const dangerSway = 0.2;
   const hydraulicDamperCount = 2;
+  const earthquakeDuration = 3.0;
+  const earthquakeStrengths = Object.freeze({ gentle: 0.18, moderate: 0.62, strong: 0.65 });
 
   function hashSeed(seed) {
     let h = 2166136261;
@@ -82,12 +84,14 @@
       mass,
       stiffness,
       damping,
-      dampingRatio
+      dampingRatio,
+      // Game tolerance balances the shorter-period towers under a common quake.
+      dangerSwayLimit: Math.round(dangerSway * Math.max(1, (6 / period) ** 2) * 100) / 100
     };
   }
 
   function defaultPulse() {
-    return { amplitude: 0.42, duration: 1.8, driftLimit: 1.2, dangerEnabled: true, collapseSway: dangerSway, collapseTime: 3, runDuration: 120, hitLimit: 4 };
+    return { amplitude: earthquakeStrengths.moderate, duration: earthquakeDuration, driftLimit: 1.2, dangerEnabled: true, collapseSway: dangerSway, collapseTime: 3, runDuration: 120, hitLimit: 4 };
   }
 
   function baseMotion(t, pulse) {
@@ -241,7 +245,7 @@
   function simulate(options) {
     const tower = options.tower;
     const damper = options.damper && options.damper.enabled ? clampDamper(options.damper) : { enabled: false };
-    const pulse = { ...defaultPulse(), ...(options.pulse || options.quake || {}) };
+    const pulse = { ...defaultPulse(), collapseSway: tower.dangerSwayLimit ?? dangerSway, ...(options.pulse || options.quake || {}) };
     const duration = options.duration || pulse.runDuration || 120;
     const sampleDt = options.sampleDt || 0.05;
     let state = initialState(options);
@@ -268,8 +272,12 @@
     return { samples, peakSway: peak, settleTime: lastAbove, overLimitTime, final: state, heat: state.heat || 0, hits: state.hits || 0, hitSeverity: state.hitSeverity || 0 };
   }
 
+  function dangerLimitReached(dangerTime, pulse) {
+    return pulse.dangerEnabled !== false && dangerTime + 1e-9 >= (pulse.collapseTime ?? 3);
+  }
+
   function evaluateDesign(tower, damper, pulse) {
-    const p = { ...defaultPulse(), ...(pulse || {}) };
+    const p = { ...defaultPulse(), collapseSway: tower.dangerSwayLimit ?? dangerSway, ...(pulse || {}) };
     const duration = p.runDuration || 120;
     const baseline = simulate({ tower, damper: { enabled: false }, pulse: p, duration, sampleDt: 0.05 });
     const designed = simulate({ tower, damper, pulse: p, duration, sampleDt: 0.05 });
@@ -278,7 +286,7 @@
     const dangerEnabled = p.dangerEnabled !== false;
     const collapseSway = p.collapseSway ?? 0.5;
     const collapseTime = p.collapseTime ?? 3;
-    const status = (dangerEnabled && designed.overLimitTime > collapseTime) || designed.peakSway > limit * 1.15 ? "failed" : designed.hits > (p.hitLimit || 4) ? "damaged" : "standing";
+    const status = dangerLimitReached(designed.overLimitTime, p) || designed.peakSway > limit * 1.15 ? "failed" : designed.hits > (p.hitLimit || 4) ? "damaged" : "standing";
     return {
       baselinePeak: baseline.peakSway,
       peakSway: designed.peakSway,
@@ -316,6 +324,8 @@
     g,
     dangerSway,
     hydraulicDamperCount,
+    earthquakeDuration,
+    earthquakeStrengths,
     hashSeed,
     rng,
     seededRange,
@@ -333,6 +343,7 @@
     stepSimulation,
     simulate,
     evaluateDesign,
+    dangerLimitReached,
     mechanicalEnergy
   };
 });

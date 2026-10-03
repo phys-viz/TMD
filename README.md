@@ -26,19 +26,24 @@ npm.cmd test
 
 ## Current Prototype
 
-- A short visible ground-motion pulse starts the building oscillating.
+- Gentle, Moderate, and Strong earthquake buttons start the building oscillating with a fixed 3.0-second ground shake. These are simplified classroom settings, not earthquake magnitudes.
+- A live message marks when ground shaking ends so students can measure the natural period with the TMD off.
 - After the pulse, the foundation stops and students observe free motion.
 - The building animation and graph are driven by the same numerical simulation state.
 - The graph shows roof sway relative to the foundation and supports fixed time ranges, A/B cursor clicks, Latest, and Full.
 - Difficulty modes:
   - Easy: no danger-zone collapse.
-  - Medium: collapse after 3.0 s accumulated beyond the danger sway limit.
-  - Hard: collapse after 2.5 s accumulated beyond the danger sway limit.
-- Danger time starts only after the pulse ends.
+  - Medium: collapse at 3.00 s accumulated beyond the danger sway limit.
+  - Hard: collapse at 2.50 s accumulated beyond the danger sway limit.
+- Danger time starts only after the pulse ends. Elapsed and danger times display hundredths; danger time displays completed hundredths and failure occurs when the limit is reached.
+- The danger-zone checkbox is disabled on Easy and enabled on Medium/Hard.
 - Danger time is based on visible roof sway, not hidden velocity/envelope values.
-- The current danger sway threshold is 0.20 m.
+- Each generated tower has a visible game sway threshold: round(0.20 * max(1, (6 / natural_period)^2), 2) m. This balances the shorter-period scenarios while retaining a common classroom earthquake; it is a classroom game rule, not a structural prediction.
 - The TMD mass range is 1-10% of the building mass.
 - Two hydraulic dampers act in parallel. At damping 0, they disappear. At damping 1, the pendulum is locked.
+- Earthquake amplitude settings are Gentle 0.18 m, Moderate 0.62 m, and Strong 0.65 m (waveform coefficients, not magnitudes or exact peak ground displacements). Moderate is calibrated so the default tower needs a useful TMD design to survive Medium.
+- Strong/Hard is calibrated for a tuned 8% mass TMD, leaving the 10% maximum as reserve. Successful designs remain sensitive to damping and length.
+- Hydraulic cylinder housings have a fixed visual length; their piston rods slide as the bob moves. The schematic limits the displayed swing to leave room for the housings.
 - Thermal energy is calculated from damping power and shown live.
 - Wall impacts are simulated from bob position and radius. Impacts affect the subsequent motion and count as hits.
 

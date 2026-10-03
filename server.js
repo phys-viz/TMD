@@ -99,8 +99,8 @@ function createRoom(body) {
     config: {
       seed,
       designMinutes: Number(body.designMinutes) || 12,
-      amplitude: Number(body.amplitude) || 0.42,
-      pulseDuration: Number(body.pulseDuration) || 1.8,
+      amplitude: Number(body.amplitude) || physics.earthquakeStrengths.moderate,
+      pulseDuration: Number(body.pulseDuration) || physics.earthquakeDuration,
       difficulty,
       runDuration: Number(body.runDuration) || 120,
       driftLimit: Number(body.driftLimit) || 1.2
@@ -147,7 +147,7 @@ function scoreRoom(room) {
   };
   room.results = Array.from(room.students.values()).map(student => {
     const submission = student.submission || physics.defaultDamperFor(student.tower);
-    const result = physics.evaluateDesign(student.tower, submission, room.quake);
+    const result = physics.evaluateDesign(student.tower, submission, { ...room.quake, collapseSway: student.tower.dangerSwayLimit ?? physics.dangerSway });
     student.submission = submission;
     student.result = result;
     return { studentId: student.id, nickname: student.nickname, tower: student.tower, submission, result };

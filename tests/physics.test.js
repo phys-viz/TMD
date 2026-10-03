@@ -100,4 +100,58 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
   assert.deepStrictEqual(a, b, "tower generation is deterministic");
 }
 
+{
+  // Use the same earthquake presets as the UI, not a separate test-only pulse.
+  const classroomTower = P.generateTower("freshman-lab", 0);
+  const moderate = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.moderate, duration: P.earthquakeDuration };
+  const tuned = P.defaultDamperFor(classroomTower);
+  const resultFor = (massRatio, damping, length = tuned.length) =>
+    P.evaluateDesign(classroomTower, { ...tuned, massRatio, damping, length }, moderate);
+  close(moderate.duration, 3, 1e-12, "classroom earthquake lasts three seconds");
+  const baseline = P.evaluateDesign(classroomTower, { enabled: false }, moderate);
+  assert.strictEqual(baseline.status, "failed", "Medium needs a TMD for the default Moderate earthquake");
+  for (const damping of [0.1, 0.25, 0.45, 0.7, 0.9]) {
+    assert.strictEqual(resultFor(0.01, damping).status, "failed", `1 percent mass is insufficient at damping ${damping}`);
+  }
+  assert.strictEqual(resultFor(0.05, 0.1).status, "failed", "too little damping fails the representative design");
+  assert.strictEqual(resultFor(0.05, 0.45).status, "standing", "a tuned middle-damping design can survive Medium");
+  assert.strictEqual(resultFor(0.05, 0.9).status, "failed", "too much damping fails the representative design");
+  assert.strictEqual(resultFor(0.06, 0.45, 2).status, "failed", "a badly mistuned pendulum fails Medium");
+  for (let index = 0; index < 24; index++) {
+    const scenario = P.generateTower("freshman-lab", index);
+    const result = P.evaluateDesign(scenario, { ...P.defaultDamperFor(scenario), massRatio: 0.1, damping: 0.45 }, moderate);
+    assert.strictEqual(result.status, "standing", `tower ${index} has a surviving design within the allowed mass range`);
+  }
+}
+{
+  const classroomTower = P.generateTower("freshman-lab", 0);
+  const strongHard = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, collapseTime: 2.5 };
+  const design = { ...P.defaultDamperFor(classroomTower), length: 8.4, massRatio: 0.08 };
+  assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, damping: 0.25 }, strongHard).status, "standing", "Strong/Hard has a successful design at the visible default length");
+  for (const damping of [0.1, 0.9]) {
+    assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, damping }, strongHard).status, "failed", "Strong/Hard still rejects excessive or insufficient damping");
+  }
+  assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, massRatio: 0.01, damping: 0.45 }, strongHard).status, "failed", "Strong/Hard needs sufficient damper mass");
+  for (const limit of [2.5, 3]) {
+    const settings = { collapseTime: limit, dangerEnabled: true };
+    assert.strictEqual(P.dangerLimitReached(limit - 0.001, settings), false, "danger time below the limit does not fail");
+    assert.strictEqual(P.dangerLimitReached(limit, settings), true, "danger time at the limit fails");
+    assert.strictEqual(P.dangerLimitReached(limit + 0.001, settings), true, "danger time above the limit fails");
+    assert.strictEqual(P.dangerLimitReached(limit, { ...settings, dangerEnabled: false }), false, "Easy has no danger failure");
+  }
+}
+{
+  // Every classroom scenario must have a successful design below the mass cap.
+  for (const seed of ["freshman-lab", "period-window-a"]) {
+    for (let index = 0; index < 24; index++) {
+      const scenario = P.generateTower(seed, index);
+      const strongHard = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, collapseTime: 2.5, collapseSway: scenario.dangerSwayLimit };
+      const damper = { ...P.defaultDamperFor(scenario), massRatio: 0.08, damping: 0.25 };
+      const result = P.evaluateDesign(scenario, damper, strongHard);
+      assert.strictEqual(result.status, "standing", `${seed} tower ${index} survives Strong/Hard with a tuned 8 percent design`);
+      assert(result.overLimitTime < 2.45, "winning design has margin below the 2.50 second limit");
+      assert.strictEqual(P.evaluateDesign(scenario, { enabled: false }, strongHard).status, "failed", "Strong/Hard still requires a working TMD");
+    }
+  }
+}
 console.log("physics tests passed");
