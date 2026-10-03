@@ -120,7 +120,7 @@ Then open `http://localhost:3000`.
 - `public/physics.js` - deterministic physics model and scoring helpers.
 - `server.js` - local Node server and prototype multiplayer room API.
 - `tests/physics.test.js` - physics regression tests.
-- `TMD_Skyscraper_Simulation_Codex_Brief.md` - original project brief.
+- `TMD_Skyscraper_Simulation_Codex_Brief.md` - maintained project brief with current classroom scope, behavior, and future extensions.
 
 ## Deployment Notes
 
