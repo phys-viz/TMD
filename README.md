@@ -26,26 +26,32 @@ npm.cmd test
 
 ## Current Prototype
 
+- Solo tower setup uses editable height (170-350 m) and mass (7.5-15 million kg), plus a Random tower button. The student seed field and tower information/Reveal panel have been removed.
+- Taller or heavier solo towers have longer natural periods through a documented classroom calibration, bounded to 4.8-7.0 seconds. Students use a stopwatch after the ground stops; the period and calculated pendulum length are not revealed or filled in when changing towers.
+- Height changes subtly move the roof in the schematic; mass changes thicken the structural columns. Changing tower settings resets the trial and preserves the student's TMD settings.
+- Compare two towers uses identical height, mass, earthquake, and difficulty with separate TMD controls above each tower. Tower A initially has its TMD off; Tower B retains the student's current design. Start, Pause, and Reset apply to both; changing either design resets both trials. A failed tower does not stop its counterpart.
+- Comparison uses matching, taller tower windows with the graph to their right on wider screens. The shared graph uses identical time/sway axes: solid teal for Tower A and dashed blue for Tower B. On narrower screens the graph moves below the towers. Leaving Compare retains the original TMD design.
+- The four elapsed-time/danger/thermal-energy/hit cards have been removed. Only a compact wall-hit label appears below each tower, and the tower header identifies its failure cause. The solo thermal-energy display is deferred.
 - Gentle, Moderate, and Strong earthquake buttons start the building oscillating with a fixed 3.0-second ground shake. These are simplified classroom settings, not earthquake magnitudes.
 - A live message marks when ground shaking ends so students can measure the natural period with the TMD off.
 - After the pulse, the foundation stops and students observe free motion.
 - The building animation and graph are driven by the same numerical simulation state.
-- The graph shows roof sway relative to the foundation and supports fixed time ranges, A/B cursor clicks, Latest, and Full.
+- The graph shows roof sway relative to the foundation and supports fixed time ranges, two numbered time cursors, Latest, and Full.
 - Difficulty modes:
   - Easy: no danger-zone collapse.
   - Medium: collapse at 3.00 s accumulated beyond the danger sway limit.
   - Hard: collapse at 2.50 s accumulated beyond the danger sway limit.
-- Danger time starts only after the pulse ends. Elapsed and danger times display hundredths; danger time displays completed hundredths and failure occurs when the limit is reached.
+- Danger time starts only after the pulse ends and failure occurs when the limit is reached. The lab uses an internal shared clock without elapsed-time or danger-time cards; graph times and classroom settling results use hundredths.
 - The danger-zone checkbox is disabled on Easy and enabled on Medium/Hard.
 - Danger time is based on visible roof sway, not hidden velocity/envelope values.
-- Each generated tower has a visible game sway threshold: round(0.20 * max(1, (6 / natural_period)^2), 2) m. This balances the shorter-period scenarios while retaining a common classroom earthquake; it is a classroom game rule, not a structural prediction.
+- Each tower has a visible game sway threshold: round(0.20 * max(1, (6 / natural_period)^2), 2) m, displayed in the solo model notes and student challenge readout. This balances the shorter-period scenarios while retaining a common classroom earthquake; it is a classroom game rule, not a structural prediction.
 - The TMD mass range is 1-10% of the building mass.
 - Two hydraulic dampers act in parallel. At damping 0, they disappear. At damping 1, the pendulum is locked.
 - Earthquake amplitude settings are Gentle 0.18 m, Moderate 0.62 m, and Strong 0.65 m (waveform coefficients, not magnitudes or exact peak ground displacements). Moderate is calibrated so the default tower needs a useful TMD design to survive Medium.
 - Strong/Hard is calibrated for a tuned 8% mass TMD, leaving the 10% maximum as reserve. Successful designs remain sensitive to damping and length.
 - Hydraulic cylinder housings have a fixed visual length; their piston rods slide as the bob moves. The schematic limits the displayed swing to leave room for the housings.
-- Thermal energy is calculated from damping power and shown live.
-- Wall impacts are simulated from bob position and radius. Impacts affect the subsequent motion and count as hits.
+- Thermal energy is calculated from damping power; its solo numeric display is deferred. Hydraulic cylinder colors still reflect accumulated heat.
+- Wall impacts are simulated from bob position and radius. The first wall hit collapses that tower on every difficulty, including Easy. The label briefly highlights the impact. Official challenge scoring also fails a design at its first wall hit and stops that design's simulation there.
 
 ## Physics Notes
 
@@ -56,6 +62,8 @@ The pendulum TMD is coupled to the building motion and integrated numerically in
 ```text
 k = M * (2*pi/T)^2
 ```
+
+For editable solo towers, define `q = sqrt((H/170 m) * (M/7.5 million kg))` and `q_max = sqrt((350/170) * (15/7.5))`. Assign `T = 4.8 s + 2.2 s * (q - 1)/(q_max - 1)` and a fixed building damping ratio of 0.0115. This is a classroom calibration that makes both dimensions matter while keeping stopwatch measurements practical, not a real skyscraper period formula. The classroom challenge continues to assign towers deterministically from the teacher's scenario seed.
 
 Students calculate tuned pendulum length from:
 

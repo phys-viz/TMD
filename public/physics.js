@@ -7,6 +7,11 @@
   const hydraulicDamperCount = 2;
   const earthquakeDuration = 3.0;
   const earthquakeStrengths = Object.freeze({ gentle: 0.18, moderate: 0.62, strong: 0.65 });
+  const labTowerLimits = Object.freeze({
+    minHeight: 170, maxHeight: 350,
+    minMass: 7.5e6, maxMass: 15e6,
+    minPeriod: 4.8, maxPeriod: 7.0
+  });
 
   function hashSeed(seed) {
     let h = 2166136261;
@@ -90,8 +95,32 @@
     };
   }
 
+  function createLabTower(height, mass) {
+    const limits = labTowerLimits;
+    const cleanHeight = clamp(height, limits.minHeight, limits.maxHeight);
+    const cleanMass = clamp(mass, limits.minMass, limits.maxMass);
+    // Classroom calibration, not a structural prediction: map sqrt(H*M) into
+    // the stopwatch-friendly period range, then derive consistent k and c.
+    const size = Math.sqrt((cleanHeight / limits.minHeight) * (cleanMass / limits.minMass));
+    const maxSize = Math.sqrt((limits.maxHeight / limits.minHeight) * (limits.maxMass / limits.minMass));
+    const period = clamp(limits.minPeriod + (limits.maxPeriod - limits.minPeriod) *
+      (size - 1) / (maxSize - 1), limits.minPeriod, limits.maxPeriod);
+    const dampingRatio = 0.0115;
+    const stiffness = cleanMass * Math.pow(2 * Math.PI / period, 2);
+    return {
+      name: "Lab tower",
+      height: cleanHeight,
+      mass: cleanMass,
+      period,
+      stiffness,
+      dampingRatio,
+      damping: 2 * dampingRatio * Math.sqrt(stiffness * cleanMass),
+      dangerSwayLimit: Math.round(dangerSway * Math.max(1, (6 / period) ** 2) * 100) / 100
+    };
+  }
+
   function defaultPulse() {
-    return { amplitude: earthquakeStrengths.moderate, duration: earthquakeDuration, driftLimit: 1.2, dangerEnabled: true, collapseSway: dangerSway, collapseTime: 3, runDuration: 120, hitLimit: 4 };
+    return { amplitude: earthquakeStrengths.moderate, duration: earthquakeDuration, driftLimit: 1.2, dangerEnabled: true, collapseSway: dangerSway, collapseTime: 3, runDuration: 120 };
   }
 
   function baseMotion(t, pulse) {
@@ -268,6 +297,12 @@
         nextSample += sampleDt;
       }
       state = stepSimulation(state, dt, tower, damper, pulse);
+      if (options.stopOnHit && state.hits > 0) {
+        const finalSample = sampleState(state, tower, damper, pulse);
+        samples.push(finalSample);
+        peak = Math.max(peak, Math.abs(finalSample.sway));
+        break;
+      }
     }
     return { samples, peakSway: peak, settleTime: lastAbove, overLimitTime, final: state, heat: state.heat || 0, hits: state.hits || 0, hitSeverity: state.hitSeverity || 0 };
   }
@@ -280,13 +315,13 @@
     const p = { ...defaultPulse(), collapseSway: tower.dangerSwayLimit ?? dangerSway, ...(pulse || {}) };
     const duration = p.runDuration || 120;
     const baseline = simulate({ tower, damper: { enabled: false }, pulse: p, duration, sampleDt: 0.05 });
-    const designed = simulate({ tower, damper, pulse: p, duration, sampleDt: 0.05 });
+    const designed = simulate({ tower, damper, pulse: p, duration, sampleDt: 0.05, stopOnHit: true });
     const improvement = baseline.settleTime > 0 ? 100 * (baseline.settleTime - designed.settleTime) / baseline.settleTime : 0;
     const limit = p.driftLimit || 1.2;
     const dangerEnabled = p.dangerEnabled !== false;
     const collapseSway = p.collapseSway ?? 0.5;
     const collapseTime = p.collapseTime ?? 3;
-    const status = dangerLimitReached(designed.overLimitTime, p) || designed.peakSway > limit * 1.15 ? "failed" : designed.hits > (p.hitLimit || 4) ? "damaged" : "standing";
+    const status = designed.hits > 0 || dangerLimitReached(designed.overLimitTime, p) || designed.peakSway > limit * 1.15 ? "failed" : "standing";
     return {
       baselinePeak: baseline.peakSway,
       peakSway: designed.peakSway,
@@ -326,6 +361,7 @@
     hydraulicDamperCount,
     earthquakeDuration,
     earthquakeStrengths,
+    labTowerLimits,
     hashSeed,
     rng,
     seededRange,
@@ -334,6 +370,7 @@
     clampDamper,
     defaultDamperFor,
     generateTower,
+    createLabTower,
     defaultPulse,
     baseMotion,
     damperCoeff,

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=control-panels-3">
+  <link rel="stylesheet" href="/styles.css?v=compare-layout-6">
 </head>
 <body>
   <header class="topbar">
@@ -26,10 +26,17 @@
         <aside class="panel controls">
           <div class="control-head">
             <h2>Experiment</h2>
-            <button id="newTowerBtn">New tower</button>
           </div>
-          <label>Seed <input id="seedInput" value="freshman-lab"></label>
-          <div class="readout compact" id="towerReadout"></div>
+          <div class="control-block tower-controls" role="group" aria-labelledby="towerHeading">
+            <h3 id="towerHeading">Tower</h3>
+            <div class="field-row two">
+              <label>Height<input id="towerHeightInput" type="number" min="170" max="350" step="1" value="345"><span class="limit">m: 170–350</span></label>
+              <label>Mass<input id="towerMassInput" type="number" min="7.5" max="15" step="0.1" value="11.5"><span class="limit">million kg: 7.5–15</span></label>
+            </div>
+            <button id="randomTowerBtn" type="button">Random tower</button>
+            <label class="check"><input id="compareEnabled" type="checkbox"> Compare two towers</label>
+            <p class="muted">With the TMD off, use a stopwatch to time several complete cycles after the ground stops.</p>
+          </div>
           <div class="control-block earthquake-controls" role="group" aria-labelledby="earthquakeHeading">
             <h3 id="earthquakeHeading">Earthquake</h3>
             <div id="earthquakeStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
@@ -54,30 +61,54 @@
             <label class="check"><input id="showDangerInput" type="checkbox" checked> Show danger zone</label>
 
           </div>
-          <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
-            <h3 id="tmdHeading">TMD</h3>
-            <label class="check"><input id="damperEnabled" type="checkbox" checked> Install TMD</label>
-            <div class="field-row three">
-              <label>Length<input id="lengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4"><span class="limit">m: 0.7-18</span></label>
-              <label>Mass<input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5"><span class="limit">%: 1-10</span></label>
-              <label>Damping<input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0.45"><span class="limit">0 none, 1 locked</span></label>
-            </div>
-          </div>
           <details>
             <summary>Model notes</summary>
             <p>A simplified 3.0-second earthquake shakes the ground and starts the tower moving. After that, the foundation stops and the graph shows free motion. Sway means roof displacement relative to the foundation, x - y.</p>
             <p class="formula">T = 2*pi*sqrt(L/g) and L = g*(T/2*pi)^2</p>
-            <p>Two hydraulic dampers remove mechanical energy from pendulum motion. The thermal energy readout is cumulative dissipated energy. At zero damping, the hydraulic dampers are removed.</p>
-            <p>Wall impacts use a simple restitution model: the bob is placed at the wall and its angular velocity reverses with reduced speed.</p>
-            <p>Failure rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the earthquake and builds while roof sway is beyond the tower's game sway limit, shown above. This tolerance varies by tower to keep challenges achievable; it is not a real structural prediction.</p>
+            <p>Tower height and mass use a classroom calibration: taller or heavier towers have longer natural periods, kept within a range suited to stopwatch measurements. The drawing is schematic; taller towers are drawn taller and heavier towers have thicker columns. Keep the same tower settings when comparing TMD designs.</p>
+            <p>Two hydraulic dampers remove mechanical energy from pendulum motion. At zero damping, the hydraulic dampers are removed.</p>
+            <p>Compare mode uses identical towers and the same earthquake with independent TMD settings. Start, Pause, and Reset apply to both. The graph uses the same time and sway axes for both traces.</p>
+            <p>One pendulum wall hit collapses that tower in every difficulty mode. Low damping and a small TMD mass can produce hits. The drawing limits displayed swing to leave room for hydraulic housings; the wall-hit label briefly highlights real impacts. Impact losses are separate from hydraulic thermal energy.</p>
+            <p>Danger rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the earthquake and builds while roof sway is beyond the tower's game sway limit: <span id="labSwayLimit"></span> m. This tolerance varies by tower to keep challenges achievable; it is not a real structural prediction.</p>
           </details>
         </aside>
-        <section class="sim-area">
-          <div class="stage-wrap">
-            <canvas id="stage" width="420" height="700"></canvas>
-            <div class="status-strip" id="metrics"></div>
+        <section class="sim-area" id="labSimulation" aria-label="Tower simulation">
+          <div class="stage-pair">
+            <article class="stage-wrap" id="compareTower" hidden aria-labelledby="compareTowerHeading">
+              <div class="stage-head"><h2 id="compareTowerHeading">Tower A</h2><span id="compareTmdState" class="tmd-state">TMD off</span></div>
+              <div class="control-block tmd-controls" role="group" aria-labelledby="compareTmdHeading">
+                <h3 id="compareTmdHeading">TMD · Tower A</h3>
+                <label class="check"><input id="compareDamperEnabled" type="checkbox"> Install TMD</label>
+                <div class="field-row three">
+                  <label>Length<input id="compareLengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4"><span class="limit">m: 0.7–18</span></label>
+                  <label>Mass<input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5"><span class="limit">%: 1–10</span></label>
+                  <label>Damping<input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0.45"><span class="limit">0 none, 1 locked</span></label>
+                </div>
+              </div>
+              <canvas id="stageCompare" width="420" height="760" aria-label="Tower A motion"></canvas>
+              <div class="tower-observations" aria-label="Tower A observations">
+                <span id="compareHitIndicator" class="hit-observation">Wall hits <strong id="compareHits">0</strong></span>
+              </div>
+            </article>
+            <article class="stage-wrap" aria-labelledby="primaryTowerHeading">
+              <div class="stage-head"><h2 id="primaryTowerHeading">Tower</h2><span id="primaryTmdState" class="tmd-state">TMD on</span></div>
+              <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
+                <h3 id="tmdHeading">TMD</h3>
+                <label class="check"><input id="damperEnabled" type="checkbox" checked> Install TMD</label>
+                <div class="field-row three">
+                  <label>Length<input id="lengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4"><span class="limit">m: 0.7–18</span></label>
+                  <label>Mass<input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5"><span class="limit">%: 1–10</span></label>
+                  <label>Damping<input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0.45"><span class="limit">0 none, 1 locked</span></label>
+                </div>
+              </div>
+              <canvas id="stage" width="420" height="760" aria-label="Tower motion"></canvas>
+              <div class="tower-observations" aria-label="Tower observations">
+                <span id="primaryHitIndicator" class="hit-observation">Wall hits <strong id="primaryHits">0</strong></span>
+              </div>
+            </article>
           </div>
           <div class="graph-wrap">
+            <div class="graph-legend" id="compareLegend" hidden><span class="trace-a">Tower A</span><span class="trace-b">Tower B</span><span class="muted">Shared time and sway axes</span></div>
             <div class="graph-tools">
               <label>Graph start<input id="graphStartInput" type="number" min="0" max="120" step="0.01" value="0"></label>
               <label>Graph end<input id="graphEndInput" type="number" min="1" max="120" step="0.01" value="24"></label>
@@ -162,7 +193,7 @@
     </section>
   </main>
 
-  <script src="/physics.js?v=earthquake-calibration-3"></script>
-  <script src="/app.js?v=balanced-towers-3"></script>
+  <script src="/physics.js?v=compare-towers-5"></script>
+  <script src="/app.js?v=compare-layout-6"></script>
 </body>
 </html>

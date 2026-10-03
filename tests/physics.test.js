@@ -154,4 +154,59 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
     }
   }
 }
+{
+  const small = P.createLabTower(170, 7.5e6);
+  const large = P.createLabTower(350, 15e6);
+  const middle = P.createLabTower(260, 11.3e6);
+  assert(P.createLabTower(350, middle.mass).period > middle.period, "height changes the physical period");
+  assert(P.createLabTower(middle.height, 15e6).period > middle.period, "mass changes the physical period");
+  assert.deepStrictEqual(P.createLabTower(0, 0), small, "tower inputs are bounded at the lower limits");
+  assert.deepStrictEqual(P.createLabTower(999, 99e6), large, "tower inputs are bounded at the upper limits");
+  assert.deepStrictEqual(P.createLabTower(260, 11.3e6), middle, "same dimensions recreate the same solo tower");
+
+  for (const height of [170, 260, 350]) {
+    for (const mass of [7.5e6, 11.3e6, 15e6]) {
+      const scenario = P.createLabTower(height, mass);
+      assert(scenario.period >= 4.8 && scenario.period <= 7, "every editable tower stays in the stopwatch range");
+      const free = P.simulate({
+        tower: scenario, damper: { enabled: false }, initialX: 0.2,
+        pulse: { amplitude: 0, dangerEnabled: false }, duration: 30, sampleDt: 0.02
+      });
+      // Measure three cycles from same-direction zero crossings of real motion.
+      const crossings = [];
+      for (let i = 1; i < free.samples.length; i++) {
+        const a = free.samples[i - 1], b = free.samples[i];
+        if (a.sway > 0 && b.sway <= 0) {
+          crossings.push(a.t + a.sway / (a.sway - b.sway) * (b.t - a.t));
+        }
+      }
+      assert(crossings.length >= 4, "a stopwatch can measure three complete cycles");
+      close((crossings[3] - crossings[0]) / 3, scenario.period, 0.01, "free-motion period matches the tower setting");
+
+      const strongHard = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, collapseTime: 2.5, collapseSway: scenario.dangerSwayLimit };
+      const damper = { ...P.defaultDamperFor(scenario), massRatio: 0.08, damping: 0.25 };
+      assert.strictEqual(P.evaluateDesign(scenario, damper, strongHard).status, "standing", `${height} m / ${mass} kg tower has a successful 8 percent design`);
+      assert.strictEqual(P.evaluateDesign(scenario, { enabled: false }, strongHard).status, "failed", "editable Hard/Strong towers still need a working TMD");
+    }
+  }
+  const soloDefault = P.createLabTower(345, 11.5e6);
+  const moderate = P.defaultPulse();
+  const tuned = { ...P.defaultDamperFor(soloDefault), massRatio: 0.05, damping: 0.45 };
+  assert.strictEqual(P.evaluateDesign(soloDefault, { enabled: false }, moderate).status, "failed", "the editable default tower needs a TMD on Medium/Moderate");
+  assert.strictEqual(P.evaluateDesign(soloDefault, tuned, moderate).status, "standing", "a useful middle-damping design survives on the editable default tower");
+  assert.strictEqual(P.evaluateDesign(soloDefault, { ...tuned, length: 2 }, moderate).status, "failed", "a mistuned design still fails on the editable default tower");
+}
+{
+  // Hits occur within actual student settings, and one hit ends the challenge.
+  const scenario = P.createLabTower(345, 11.5e6);
+  const damper = { ...P.defaultDamperFor(scenario), length: 10.3, massRatio: 0.01, damping: 0 };
+  const strong = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong };
+  for (const dangerEnabled of [false, true]) {
+    const result = P.evaluateDesign(scenario, damper, { ...strong, dangerEnabled });
+    assert.strictEqual(result.status, "failed", "the first wall hit fails official scoring even on Easy");
+    assert.strictEqual(result.hits, 1, "official simulation stops at one physical hit");
+    assert(result.samples[result.samples.length - 1].t < strong.runDuration, "the impact ends the design's observation run");
+    close(result.heat, 0, 1e-9, "the terminal hit is not counted as hydraulic heat");
+  }
+}
 console.log("physics tests passed");

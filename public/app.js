@@ -2,8 +2,12 @@ const P = window.TMDPhysics;
 const $ = id => document.getElementById(id);
 const fmt = (n, d = 2) => Number(n || 0).toFixed(d);
 
-let labTower = P.generateTower("freshman-lab", 0);
+let labTower = P.createLabTower(Number($("towerHeightInput").value), Number($("towerMassInput").value) * 1e6);
 let sim = null;
+let compareSim = null;
+let labTime = 0;
+let labPaused = false;
+let comparisonInitialized = false;
 let currentRoom = null;
 let currentStudent = null;
 let events = null;
@@ -93,28 +97,29 @@ function pulseFromLab() {
   };
 }
 
-function damperFromLab(enabled = $("damperEnabled").checked) {
+function damperFromLab(comparison = false) {
+  const ids = comparison ? ["compareDamperEnabled", "compareLengthInput", "compareMassInput", "compareDampingInput"] :
+    ["damperEnabled", "lengthInput", "massInput", "dampingInput"];
   return P.clampDamper({
-    enabled,
-    length: inputNumber("lengthInput", 8.4),
-    massRatio: inputNumber("massInput", 3.5) / 100,
-    damping: inputNumber("dampingInput", 0.45),
+    enabled: $(ids[0]).checked,
+    length: inputNumber(ids[1], 8.4),
+    massRatio: inputNumber(ids[2], 3.5) / 100,
+    damping: inputNumber(ids[3], 0.45),
     wallLimit: 2.7,
     restitution: 0.28,
     bobRadius: 0.3
   });
 }
 
-function makeSim() {
-  const damper = damperFromLab();
-  const pulse = pulseFromLab();
-  sim = {
+function makeRun(damper, pulse, baseline) {
+  const state = P.initialState();
+  return {
     tower: labTower,
     damper,
     pulse,
-    state: P.initialState(),
-    baseline: P.simulate({ tower: labTower, damper: { enabled: false }, pulse, duration: pulse.runDuration, sampleDt: 0.05 }),
-    samples: [],
+    state,
+    baseline,
+    samples: [P.sampleState(state, labTower, damper, pulse)],
     playing: false,
     energyScale: Math.max(4000, labTower.mass * 0.0012),
     lastClock: performance.now(),
@@ -124,71 +129,77 @@ function makeSim() {
     overLimitTime: 0,
     failed: false,
     failedAt: null,
-    collapseAge: 0
+    collapseAge: 0,
+    failureCause: null,
+    hitFlash: 0
   };
-  appendSample();
+}
+
+function makeSim() {
+  const pulse = pulseFromLab();
+  const baseline = P.simulate({ tower: labTower, damper: { enabled: false }, pulse, duration: pulse.runDuration, sampleDt: 0.05 });
+  sim = makeRun(damperFromLab(), pulse, baseline);
+  compareSim = $("compareEnabled").checked ? makeRun(damperFromLab(true), pulse, baseline) : null;
+  labTime = 0;
+  labPaused = false;
+}
+
+function labRuns() {
+  return compareSim ? [compareSim, sim] : [sim];
 }
 
 function updateLabels() {
-  const predicted = P.g * Math.pow(labTower.period / (2 * Math.PI), 2);
-  $("towerReadout").innerHTML = `
-    <strong>${labTower.name}</strong><br>
-    Height ${labTower.height} m; mass ${(labTower.mass / 1e6).toFixed(1)} million kg<br>
-    Game sway limit: ${fmt(labTower.dangerSwayLimit ?? DANGER_SWAY)} m<br>
-    Measure natural period from the free-motion peaks.<br>
-    Reference after measuring: <button type="button" id="revealPeriodBtn">Reveal</button>
-    <span id="periodSecret" hidden>${fmt(labTower.period)} s; tuned length ${fmt(predicted)} m</span>
-  `;
-  $("revealPeriodBtn").addEventListener("click", () => {
-    $("periodSecret").hidden = false;
-    $("revealPeriodBtn").disabled = true;
-  });
+  $("labSwayLimit").textContent = fmt(labTower.dangerSwayLimit);
 }
 
-function appendSample() {
-  const sample = P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse);
-  sim.samples.push(sample);
-  if (sim.samples.length > 3600) sim.samples.shift();
-  sim.peak = Math.max(sim.peak, Math.abs(sample.sway));
-  if (sample.t > sim.pulse.duration && Math.abs(sample.sway) > 0.06) sim.lastAbove = sample.t;
+function applyTowerInputs() {
+  normalizeNumberInput("towerHeightInput", 0);
+  normalizeNumberInput("towerMassInput", 1);
+  labTower = P.createLabTower(Number($("towerHeightInput").value), Number($("towerMassInput").value) * 1e6);
+  updateLabels();
+  resetLab();
+}
+
+function appendSample(run) {
+  const sample = P.sampleState(run.state, run.tower, run.damper, run.pulse);
+  run.samples.push(sample);
+  if (run.samples.length > 3600) run.samples.shift();
+  run.peak = Math.max(run.peak, Math.abs(sample.sway));
+  if (sample.t > run.pulse.duration && Math.abs(sample.sway) > 0.06) run.lastAbove = sample.t;
+}
+
+function stepRun(run, dt) {
+  if (run.failed) return;
+  const previousT = run.state.t;
+  const oldHeat = run.state.heat || 0;
+  const oldHits = run.state.hits || 0;
+  run.state = P.stepSimulation(run.state, dt, run.tower, run.damper, run.pulse);
+  if ((run.state.heat || 0) < oldHeat) run.state.heat = oldHeat;
+  const sample = P.sampleState(run.state, run.tower, run.damper, run.pulse);
+  if (sample.hits > oldHits) run.hitFlash = 0.6;
+  const dangerDt = Math.max(0, run.state.t - Math.max(previousT, run.pulse.duration));
+  if (run.pulse.dangerEnabled !== false && Math.abs(sample.sway) > run.pulse.collapseSway) run.overLimitTime += dangerDt;
+  if (sample.hits > 0 || P.dangerLimitReached(run.overLimitTime, run.pulse)) {
+    run.failed = true;
+    run.failedAt = run.state.t;
+    run.failureCause = sample.hits > 0 ? "Wall hit — failed" : "Danger limit — failed";
+    appendSample(run);
+    return;
+  }
+  run.sampleClock += dt;
+  if (run.sampleClock >= 0.04) {
+    appendSample(run);
+    run.sampleClock %= 0.04;
+  }
 }
 
 function stepLive(dt) {
-  const previousT = sim.state.t;
-  const oldHeat = sim.state.heat || 0;
-  sim.state = P.stepSimulation(sim.state, dt, sim.tower, sim.damper, sim.pulse);
-  if ((sim.state.heat || 0) < oldHeat) sim.state.heat = oldHeat;
-  const sample = P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse);
-  const dangerEnabled = sim.pulse.dangerEnabled !== false;
-  const dangerDt = Math.max(0, sim.state.t - Math.max(previousT, sim.pulse.duration));
-  if (dangerEnabled && Math.abs(sample.sway) > sim.pulse.collapseSway) sim.overLimitTime += dangerDt;
-  if (dangerEnabled && !sim.failed && P.dangerLimitReached(sim.overLimitTime, sim.pulse)) {
-    sim.failed = true;
-    sim.failedAt = sim.state.t;
-    sim.playing = false;
-    appendSample();
-    return;
+  const step = Math.min(Math.max(0, dt), sim.pulse.runDuration - labTime);
+  if (step > 0) {
+    labRuns().forEach(run => stepRun(run, step));
+    labTime += step;
   }
-  sim.sampleClock += dt;
-  while (sim.sampleClock >= 0.04) {
-    appendSample();
-    sim.sampleClock -= 0.04;
-  }
-}
-
-function measuredPeriod(samples) {
-  const peaks = [];
-  for (let i = 1; i < samples.length - 1; i++) {
-    if (samples[i].t > sim.pulse.duration && samples[i].sway > samples[i - 1].sway && samples[i].sway > samples[i + 1].sway && samples[i].sway > 0.04) peaks.push(samples[i].t);
-  }
-  if (peaks.length < 2) return null;
-  const gaps = [];
-  for (let i = 1; i < Math.min(peaks.length, 5); i++) gaps.push(peaks[i] - peaks[i - 1]);
-  return gaps.reduce((a, b) => a + b, 0) / gaps.length;
-}
-
-function metric(label, value, hint = "") {
-  return `<div class="metric"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`;
+  if (labTime >= sim.pulse.runDuration - 1e-9 || labRuns().every(run => run.failed)) sim.playing = false;
 }
 
 function strutHeatColor(energy, scale) {
@@ -280,7 +291,7 @@ function towerPoint(baseX, roofX, towerWidth, bottom, top, side, y) {
   return baseX + (roofX - baseX) * t + side * towerWidth / 2;
 }
 
-function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, failed = false) {
+function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, failed = false, columnWidth = 5) {
   const left0 = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, y0);
   const right0 = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, y0);
   const left1 = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, y1);
@@ -313,7 +324,7 @@ function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, fa
   ctx.restore();
 
   ctx.strokeStyle = failed ? "#723a37" : "#1e2d36";
-  ctx.lineWidth = 5;
+  ctx.lineWidth = columnWidth;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(left0, y0);
@@ -324,8 +335,8 @@ function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, fa
   ctx.lineCap = "butt";
 }
 
-function drawStage(sample) {
-  const canvas = $("stage");
+function drawStage(sample, run = sim, canvasId = "stage") {
+  const canvas = $(canvasId);
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
@@ -334,9 +345,14 @@ function drawStage(sample) {
   const rawRoofX = baseX + sample.sway * scale;
   const roofX = rawRoofX;
   const bottom = h - 44;
-  const top = 58;
+  const heightFraction = P.clamp((run.tower.height - P.labTowerLimits.minHeight) /
+    (P.labTowerLimits.maxHeight - P.labTowerLimits.minHeight), 0, 1);
+  const massFraction = P.clamp((run.tower.mass - P.labTowerLimits.minMass) /
+    (P.labTowerLimits.maxMass - P.labTowerLimits.minMass), 0, 1);
+  const top = 118 - 60 * heightFraction;
+  const columnWidth = 4 + 4 * massFraction;
   const towerWidth = 216;
-  const d = sim.damper;
+  const d = run.damper;
 
   const sky = ctx.createLinearGradient(0, 0, 0, h);
   sky.addColorStop(0, "#e8f2f5");
@@ -363,9 +379,9 @@ function drawStage(sample) {
   ctx.roundRect(baseX - 138, bottom - 8, 276, 12, 3);
   ctx.fill();
 
-  const dangerEnabled = sim.pulse.dangerEnabled !== false;
-  if (!sim.failed && dangerEnabled && $("showDangerInput").checked) {
-    const dangerPx = (sim.pulse.collapseSway ?? DANGER_SWAY) * scale;
+  const dangerEnabled = run.pulse.dangerEnabled !== false;
+  if (!run.failed && dangerEnabled && $("showDangerInput").checked) {
+    const dangerPx = (run.pulse.collapseSway ?? DANGER_SWAY) * scale;
     const leftLimit = baseX - towerWidth / 2 - dangerPx;
     const rightLimit = baseX + towerWidth / 2 + dangerPx;
     const zoneTop = 0;
@@ -398,11 +414,11 @@ function drawStage(sample) {
     ctx.restore();
   }
 
-  if (sim.failed) {
-    const p = P.clamp(sim.collapseAge / 2.2, 0, 1);
-    const impact = Math.max(0, 1 - sim.collapseAge / 0.45);
-    const shakeX = Math.sin(sim.collapseAge * 60) * 5 * impact;
-    const shakeY = Math.cos(sim.collapseAge * 47) * 3 * impact;
+  if (run.failed) {
+    const p = P.clamp(run.collapseAge / 2.2, 0, 1);
+    const impact = Math.max(0, 1 - run.collapseAge / 0.45);
+    const shakeX = Math.sin(run.collapseAge * 60) * 5 * impact;
+    const shakeY = Math.cos(run.collapseAge * 47) * 3 * impact;
     ctx.save();
     ctx.translate(shakeX, shakeY);
     if (impact > 0) {
@@ -436,7 +452,7 @@ function drawStage(sample) {
     ctx.restore();
 
     ctx.strokeStyle = "#723a37";
-    ctx.lineWidth = 5;
+    ctx.lineWidth = columnWidth;
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(leftBase, bottom);
@@ -499,7 +515,7 @@ function drawStage(sample) {
     return;
   }
 
-  drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, bottom, top, false);
+  drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, bottom, top, false, columnWidth);
   ctx.fillStyle = "#0f7b7e";
   ctx.save();
   ctx.shadowColor = "rgba(20, 33, 42, .20)";
@@ -509,7 +525,7 @@ function drawStage(sample) {
   ctx.fill();
   ctx.restore();
 
-  if (d.enabled && !sim.failed) {
+  if (d.enabled && !run.failed) {
     const pivotX = roofX;
     const pivotY = top + 2;
     const Lpx = P.clamp(d.length * 13, 45, 190);
@@ -532,7 +548,7 @@ function drawStage(sample) {
     }
     const bobX = pivotX + drawOffset;
     const bobY = pivotY + Math.sqrt(Math.max(0, Lpx * Lpx - drawOffset * drawOffset));
-    const warmColor = strutHeatColor(sample.heat, sim.energyScale);
+    const warmColor = strutHeatColor(sample.heat, run.energyScale);
 
     ctx.strokeStyle = "#1e2d36";
     ctx.lineWidth = 2;
@@ -579,8 +595,11 @@ function drawGraph() {
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
-  const rows = sim.samples;
-  const plot = { left: 48, right: w - 18, top: 28, bottom: h - 44 };
+  const traces = compareSim ? [
+    { run: compareSim, color: "#0f7b7e", dash: [] },
+    { run: sim, color: "#245e9b", dash: [8, 5] }
+  ] : [{ run: sim, color: "#0f7b7e", dash: [] }];
+  const plot = { left: 48, right: w - 18, top: 48, bottom: h - 44 };
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = "#f8fbfc";
   ctx.fillRect(0, 0, w, h);
@@ -592,13 +611,12 @@ function drawGraph() {
     ctx.lineTo(plot.right, y);
     ctx.stroke();
   }
-  if (rows.length < 2) return;
   const { start: tMin, end: tMax } = graphRange();
-  const visible = rows.filter(r => r.t >= tMin && r.t <= tMax);
+  traces.forEach(trace => { trace.visible = trace.run.samples.filter(r => r.t >= tMin && r.t <= tMax); });
   const danger = sim.pulse.collapseSway ?? 0.5;
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
   let maxY = 0.15;
-  visible.forEach(r => { maxY = Math.max(maxY, Math.abs(r.sway)); });
+  traces.forEach(trace => trace.visible.forEach(r => { maxY = Math.max(maxY, Math.abs(r.sway)); }));
   if (dangerEnabled) maxY = Math.max(maxY, danger * 1.15);
   const yFor = value => (plot.top + plot.bottom) / 2 - value / maxY * ((plot.bottom - plot.top) * 0.45);
   if (dangerEnabled) {
@@ -619,16 +637,26 @@ function drawGraph() {
     ctx.fillStyle = "#b9412f";
     ctx.fillText("danger zone", plot.right - 92, dangerTop - 6);
   }
-  ctx.strokeStyle = "#0f7b7e";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  visible.forEach((r, i) => {
-    const x = plot.left + (r.t - tMin) / Math.max(0.5, tMax - tMin) * (plot.right - plot.left);
-    const y = yFor(r.sway);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  const xFor = t => plot.left + (t - tMin) / Math.max(0.5, tMax - tMin) * (plot.right - plot.left);
+  traces.forEach(trace => {
+    ctx.strokeStyle = trace.color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(trace.dash);
+    ctx.beginPath();
+    trace.visible.forEach((r, i) => {
+      if (i === 0) ctx.moveTo(xFor(r.t), yFor(r.sway));
+      else ctx.lineTo(xFor(r.t), yFor(r.sway));
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const end = trace.run.samples[trace.run.samples.length - 1];
+    if (trace.run.failed && end.t >= tMin && end.t <= tMax) {
+      ctx.fillStyle = trace.color;
+      ctx.beginPath();
+      ctx.arc(xFor(end.t), yFor(end.sway), 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   });
-  ctx.stroke();
   ctx.fillStyle = "#425160";
   ctx.font = "13px system-ui";
   ctx.fillText("roof sway relative to foundation", plot.left, 18);
@@ -647,53 +675,71 @@ function drawGraph() {
     ctx.lineTo(x, plot.bottom);
     ctx.stroke();
     ctx.fillStyle = ctx.strokeStyle;
-    ctx.fillText(idx === 0 ? "A" : "B", x + 4, plot.top + 16);
+    ctx.fillText(String(idx + 1), x + 4, plot.top + 16);
   });
   if (graphCursors.length === 2) {
     const dt = Math.abs(graphCursors[1] - graphCursors[0]);
     ctx.fillStyle = "#17212b";
-    ctx.fillText(`A-B = ${fmt(dt)} s`, plot.left + 120, 18);
+    ctx.fillText(`Δt = ${fmt(dt)} s`, plot.left, 36);
   } else {
     ctx.fillStyle = "#5f6f7f";
-    ctx.fillText("click graph to place A/B period cursors", plot.left + 205, 18);
+    ctx.fillText("click graph to place time cursors", plot.left, 36);
   }
 }
 
+function syncCompareLayout() {
+  const comparing = !!compareSim;
+  $("labSimulation").classList.toggle("compare-mode", comparing);
+  $("compareTower").hidden = !comparing;
+  $("compareLegend").hidden = !comparing;
+  $("primaryTowerHeading").textContent = comparing ? "Tower B" : "Tower";
+  $("tmdHeading").textContent = comparing ? "TMD · Tower B" : "TMD";
+  $("stage").setAttribute("aria-label", comparing ? "Tower B motion" : "Tower motion");
+  $("stage").height = comparing ? 740 : 760;
+  $("stageCompare").height = comparing ? 740 : 760;
+  $("graph").width = 560;
+  $("graph").height = comparing ? 880 : 620;
+}
+
+function renderRun(run, prefix, canvasId) {
+  const sample = P.sampleState(run.state, run.tower, run.damper, run.pulse);
+  // Failed towers stop integrating, but both foundations still share the clock.
+  sample.y = P.baseMotion(labTime, run.pulse).y;
+  sample.sway = sample.x - sample.y;
+  drawStage(sample, run, canvasId);
+  $(`${prefix}TmdState`).textContent = run.failureCause || (!run.damper.enabled ? "TMD off" : run.damper.damping >= 0.999 ? "TMD locked" : "TMD on");
+  $(`${prefix}Hits`).textContent = String(sample.hits);
+  $(`${prefix}HitIndicator`).classList.toggle("impact", run.hitFlash > 0);
+}
+
 function renderLab() {
-  const sample = P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse);
-  drawStage(sample);
+  renderRun(sim, "primary", "stage");
+  if (compareSim) renderRun(compareSim, "compare", "stageCompare");
   drawGraph();
-  $("earthquakeStatus").textContent = sample.t === 0 ? "A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops." : sample.t < sim.pulse.duration ? "Earthquake in progress: the ground is shaking." : "Ground stopped: measure the building's period now. Turn the TMD off to measure its natural period.";
-  const measured = measuredPeriod(sim.samples);
+  $("earthquakeStatus").textContent = labRuns().every(run => run.failed) ? "Reset to try a new TMD design." : labTime === 0 ? "A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops." : labTime < sim.pulse.duration ? "Earthquake in progress: the ground is shaking." : "Ground stopped: measure the building's period now. Turn the TMD off to measure its natural period.";
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
   const dangerToggle = $("showDangerInput");
   dangerToggle.disabled = !dangerEnabled;
   dangerToggle.title = dangerEnabled ? "" : "Easy mode has no danger zone.";
-  // Show completed hundredths so the display cannot round up to the failure limit.
-  const dangerHundredths = Math.floor((Math.min(sim.overLimitTime, sim.pulse.collapseTime) + 1e-9) * 100) / 100;
-  const dangerText = dangerEnabled ? `${fmt(dangerHundredths, 2)} / ${fmt(sim.pulse.collapseTime, 2)} s` : "Off";
-  $("metrics").innerHTML = [
-    metric("Time", `${fmt(sample.t, 2)} s`),
-    metric("Danger", dangerText),
-    metric("Thermal energy", `${fmt(sample.heat / 1000, 1)} kJ`),
-    metric(sim.failed ? "Status" : "Hits", sim.failed ? "Failed" : `${sample.hits}`)
-  ].join("");
 }
 
 function resetLab() {
   graphCursors = [];
   makeSim();
+  syncCompareLayout();
   setGraphRange($("graphStartInput").value, $("graphEndInput").value);
   renderLab();
 }
 
 function animateLab(now) {
   if (!sim) resetLab();
-  const elapsed = Math.min(0.06, (now - sim.lastClock) / 1000);
+  const elapsed = Math.max(0, Math.min(0.06, (now - sim.lastClock) / 1000));
   sim.lastClock = now;
-  if (sim.failed) {
-    sim.collapseAge += elapsed;
-  } else if (sim.playing && sim.state.t < sim.pulse.runDuration) {
+  if (!labPaused) labRuns().forEach(run => {
+    if (run.failed) run.collapseAge = Math.min(2.2, run.collapseAge + elapsed);
+    run.hitFlash = Math.max(0, run.hitFlash - elapsed);
+  });
+  if (sim.playing) {
     stepLive(elapsed);
   }
   renderLab();
@@ -813,7 +859,8 @@ function animateCity() {
   requestAnimationFrame(animateCity);
 }
 
-["lengthInput", "massInput", "dampingInput", "damperEnabled"].forEach(id => {
+["lengthInput", "massInput", "dampingInput", "damperEnabled",
+  "compareLengthInput", "compareMassInput", "compareDampingInput", "compareDamperEnabled"].forEach(id => {
   $(id).addEventListener("input", () => {
     updateLabels();
     resetLab();
@@ -825,7 +872,10 @@ document.querySelectorAll('input[name="difficultyMode"]').forEach(input => {
 [
   ["lengthInput", 2],
   ["massInput", 1],
-  ["dampingInput", 2]
+  ["dampingInput", 2],
+  ["compareLengthInput", 2],
+  ["compareMassInput", 1],
+  ["compareDampingInput", 2]
 ].forEach(([id, digits]) => {
   $(id).addEventListener("change", () => {
     normalizeNumberInput(id, digits);
@@ -834,13 +884,15 @@ document.querySelectorAll('input[name="difficultyMode"]').forEach(input => {
   });
 });
 $("playBtn").addEventListener("click", () => {
+  if (labTime >= sim.pulse.runDuration - 1e-9 || labRuns().every(run => run.failed)) resetLab();
+  labPaused = false;
   sim.playing = true;
   sim.lastClock = performance.now();
 });
-$("pauseBtn").addEventListener("click", () => { sim.playing = false; });
+$("pauseBtn").addEventListener("click", () => { sim.playing = false; labPaused = true; });
 $("resetBtn").addEventListener("click", () => resetLab());
 $("graph").addEventListener("click", event => {
-  if (!sim || sim.samples.length < 2) return;
+  if (!sim || labRuns().every(run => run.samples.length < 2)) return;
   const rect = $("graph").getBoundingClientRect();
   const x = (event.clientX - rect.left) / rect.width * $("graph").width;
   const { start: tMin, end: tMax } = graphRange();
@@ -863,7 +915,7 @@ $("graphEndInput").addEventListener("change", () => {
 });
 $("graphLatestBtn").addEventListener("click", () => {
   const width = graphRange().end - graphRange().start;
-  const end = Math.min(sim.pulse.runDuration, Math.max(width, sim.state.t));
+  const end = Math.min(sim.pulse.runDuration, Math.max(width, labTime));
   setGraphRange(end - width, end);
   graphCursors = [];
   renderLab();
@@ -874,15 +926,22 @@ $("graphFullBtn").addEventListener("click", () => {
   renderLab();
 });
 $("showDangerInput").addEventListener("change", () => renderLab());
-$("newTowerBtn").addEventListener("click", () => {
-  labTower = P.generateTower($("seedInput").value || "freshman-lab", Math.floor(Math.random() * 1000));
-  const d = P.defaultDamperFor(labTower);
-  $("lengthInput").value = fmt(d.length);
-  $("massInput").value = fmt(d.massRatio * 100, 1);
-  $("dampingInput").value = fmt(d.damping, 2);
-  graphCursors = [];
-  updateLabels();
+$("compareEnabled").addEventListener("change", () => {
+  if ($("compareEnabled").checked && !comparisonInitialized) {
+    [["lengthInput", "compareLengthInput"], ["massInput", "compareMassInput"], ["dampingInput", "compareDampingInput"]]
+      .forEach(([source, target]) => { $(target).value = $(source).value; });
+    comparisonInitialized = true;
+  }
   resetLab();
+});
+["towerHeightInput", "towerMassInput"].forEach(id => {
+  $(id).addEventListener("change", applyTowerInputs);
+});
+$("randomTowerBtn").addEventListener("click", () => {
+  const limits = P.labTowerLimits;
+  $("towerHeightInput").value = Math.round(limits.minHeight + Math.random() * (limits.maxHeight - limits.minHeight));
+  $("towerMassInput").value = fmt((limits.minMass + Math.random() * (limits.maxMass - limits.minMass)) / 1e6, 1);
+  applyTowerInputs();
 });
 
 $("roomForm").addEventListener("submit", async event => {
