@@ -7,7 +7,7 @@ const vm = require("vm");
 const source = fs.readFileSync(path.join(__dirname, "../public/app.js"), "utf8");
 const bodyConstant = source.match(/const HYDRAULIC_BODY_PX = [^;]+;/)[0];
 const renderer = source.slice(source.indexOf("function drawHydraulicDamper("), source.indexOf("function drawLockBrace("));
-const context = vm.createContext({});
+const context = vm.createContext({ P: require("../public/physics.js") });
 vm.runInContext(bodyConstant + "\n" + renderer, context);
 
 function render(bobX, bobY) {
@@ -89,6 +89,21 @@ const app = vm.createContext({
   performance: { now: () => clock }, requestAnimationFrame() {},
   Math: Object.create(Math)
 });
+function contactAngle(tower, damper, side = 1, sway = 0) {
+  const P = require("../public/physics.js");
+  let low = 0, high = 0;
+  for (let angle = 0.001; angle < Math.PI / (2 * P.pendulumAngleScale); angle += 0.001) {
+    if (P.pendulumContact(tower, damper, side * angle, sway).clearance <= 0) { high = angle; break; }
+    low = angle;
+  }
+  assert(high > low, "fixture has a reachable contact");
+  for (let i = 0; i < 35; i++) {
+    const mid = (low + high) / 2;
+    if (P.pendulumContact(tower, damper, side * mid, sway).clearance <= 0) high = mid; else low = mid;
+  }
+  return side * high;
+}
+app.contactAngle = contactAngle;
 vm.runInContext(source, app);
 const state = () => vm.runInContext("sim", app);
 assert.strictEqual(vm.runInContext("graphRange().start", app), 0, "Solo graph starts at zero by default");
@@ -261,12 +276,12 @@ vm.runInContext("setGraphRange(0, 120, true)", app);
 for (const mode of ["easy", "medium", "hard"]) {
   difficulty = mode;
   dom.compareLengthInput.value = "10";
-  vm.runInContext("resetLab(); compareSim.state.th = Math.asin(2.5 / compareSim.damper.length); compareSim.state.w = 0.2", app);
+  vm.runInContext("resetLab(); compareSim.state.th = contactAngle(compareSim.tower, compareSim.damper) - 0.0002; compareSim.state.w = 0.2", app);
   dom.playBtn.dispatch("click");
   vm.runInContext("stepLive(0.01); renderLab()", app);
   assert.strictEqual(comparison().failed, true, `one wall hit fails Tower A on ${mode}`);
-  assert.strictEqual(comparison().state.hits, 1, "the first physical hit is terminal");
-  assert.strictEqual(comparison().failureCause, "Wall hit — failed", "the failure cause is explicit");
+  assert.strictEqual(comparison().state.hits, 1, "the first displayed contact is terminal");
+  assert.strictEqual(comparison().failureCause, "Collision — failed", "the failure cause is explicit");
   assert.strictEqual(state().failed, false, "a wall hit leaves the other tower standing");
   assert.strictEqual(state().playing, true, "a failed tower does not stop its counterpart");
   assert.strictEqual(dom.compareFailure.textContent, comparison().failureCause, "the failure cause remains accessible without a status row");
@@ -292,4 +307,83 @@ assert.strictEqual(dom.compareTower.hidden, true, "leaving Compare hides Tower A
 dom.graph.ctx.drawings.length = 0;
 vm.runInContext("renderLab()", app);
 assert(hasTrace("graph", "#0f7b7e"), "Solo retains its own sway graph");
+dom.damperEnabled.checked = true;
+dom.dampingSlider.value = "0.99";
+dom.stage.ctx.drawings.length = 0;
+dom.dampingSlider.dispatch("input");
+assert.strictEqual(dom.dampingInput.value, "0.99", "slider displays damping to hundredths");
+assert.strictEqual(state().damper.damping, 0.99, "slider updates the simulated resistance");
+assert(!dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "LOCKED"), "0.99 is not visually locked");
+dom.dampingInput.value = "0.986";
+dom.dampingInput.dispatch("change");
+assert.strictEqual(dom.dampingInput.value, "0.99", "numeric edits round to hundredths on commit");
+assert.strictEqual(Number(dom.dampingSlider.value), 0.99, "numeric edits synchronize the slider");
+assert.strictEqual(state().damper.damping, 0.99, "committed damping uses hundredths in the simulation");
+dom.dampingSlider.value = "1";
+dom.stage.ctx.drawings.length = 0;
+dom.dampingSlider.dispatch("input");
+assert.strictEqual(dom.dampingInput.value, "1.00", "the lock endpoint is explicit in the readout");
+assert.strictEqual(dom.dampingSlider["aria-valuetext"], "1.00, locked", "the lock endpoint is accessible");
+assert(dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "LOCKED"), "only the endpoint shows lock braces");
+dom.compareEnabled.checked = true;
+dom.compareEnabled.dispatch("change");
+dom.compareDampingSlider.value = "0.99";
+dom.compareDampingSlider.dispatch("input");
+assert.strictEqual(comparison().damper.damping, 0.99, "Tower A has an independent resistance slider");
+assert.strictEqual(state().damper.damping, 1, "Tower A edits preserve Tower B's lock setting");
+assert.strictEqual(vm.runInContext("labTime", app), 0, "resistance edits reset the shared trial");
+// The bob follows its angle continuously right up to contact, without a
+// separate visual clamp that could pin it while the physical angle changes.
+vm.runInContext("resetLab(); sim.damper = { ...sim.damper, length: 10.3, massRatio: 0.01, damping: 0.1, enabled: true }", app);
+const travel = vm.runInContext("P.pendulumGeometry(sim.tower, sim.damper)", app);
+const limitAngle = contactAngle(state().tower, state().damper);
+const offsets = [];
+for (const fraction of [0.8, 0.9, 0.99]) {
+  dom.stage.ctx.drawings.length = 0;
+  const angle = limitAngle * fraction;
+  vm.runInContext(`drawStage({ ...P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse), theta: ${angle} })`, app);
+  const bob = dom.stage.ctx.drawings.find(d => d.method === "arc" && Math.abs(d.args[2] - travel.bobRadiusPx) < 1e-9);
+  assert(bob, "the live bob remains visible before contact");
+  const offset = bob.args[0] - dom.stage.width / 2;
+  assert(Math.abs(offset - Math.sin(angle * app.window.TMDPhysics.pendulumAngleScale) * travel.lengthPx) < 1e-9, "displayed displacement follows the actual pendulum angle");
+  offsets.push(offset);
+}
+assert(offsets[0] < offsets[1] && offsets[1] < offsets[2], "bob keeps moving as it approaches the displayed contact limit");
+for (const sway of [-0.8, -0.4, 0, 0.4, 0.8]) {
+  dom.stage.ctx.drawings.length = 0;
+  vm.runInContext(`drawStage({ ...P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse), sway: ${sway}, y: 0.3, theta: 0 })`, app);
+  const P = app.window.TMDPhysics;
+  const g = P.pendulumGeometry(state().tower, state().damper, sway);
+  const commands = dom.stage.ctx.drawings;
+  const housings = commands.map((command, index) => ({ ...command, index })).filter(d => d.method === "stroke" && d.width === 8 && /^rgb/.test(d.color));
+  assert.strictEqual(housings.length, 2, "both rigid housings remain visible while the tower sways");
+  housings.forEach((housing, index) => {
+    const start = commands.slice(0, housing.index).findLast(d => d.method === "moveTo").args;
+    const end = commands.slice(0, housing.index).findLast(d => d.method === "lineTo").args;
+    const side = index === 0 ? -1 : 1;
+    const expectedX = dom.stage.width / 2 + 0.3 * 132 + sway * 132 * (436 - g.anchorY) / (436 - g.top) + side * 108;
+    assert(Math.abs(start[0] - expectedX) < 1e-9 && start[1] === g.anchorY, "each housing starts exactly on its moving column");
+    assert(Math.abs(Math.hypot(end[0] - start[0], end[1] - start[1]) - P.hydraulicBodyPx) < 1e-9, "housing length stays fixed at every sway position");
+  });
+}
+for (const damping of [0, 0.1]) for (const side of [-1, 1]) {
+  vm.runInContext(`resetLab(); sim.damper = { ...sim.damper, length: ${damping ? 8.4 : 10.3}, massRatio: 0.01, damping: ${damping}, enabled: true }; sim.state.th = contactAngle(sim.tower, sim.damper, ${side}) - ${side} * 0.0002; sim.state.w = ${side} * 0.2; stepLive(0.01); sim.collapseAge = 0.2`, app);
+  assert.strictEqual(state().failed, true, "visible contact immediately fails the tower");
+  dom.stage.ctx.drawings.length = 0;
+  vm.runInContext("renderLab()", app);
+  const P = app.window.TMDPhysics;
+  const sample = P.sampleState(state().state, state().tower, state().damper, state().pulse);
+  const g = P.pendulumGeometry(state().tower, state().damper, sample.sway);
+  const bob = dom.stage.ctx.drawings.find(d => d.method === "arc" && d.args[2] === g.bobRadiusPx);
+  assert(bob, "failed tower briefly retains its bob at the impact pose");
+  const pivotX = dom.stage.width / 2 + (sample.y + sample.sway) * 132;
+  const contact = state().state.contact;
+  assert(Math.abs(Math.hypot(bob.args[0] - pivotX - contact.x, bob.args[1] - contact.y) - g.bobRadiusPx) < 0.000001, "impact marker lies exactly on the bob's touching surface");
+  assert(dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "IMPACT"), "the contact is visibly marked before collapse");
+  vm.runInContext("sim.collapseAge = 0.46", app);
+  dom.stage.ctx.drawings.length = 0;
+  vm.runInContext("renderLab()", app);
+  assert(dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "FAILED"), "collapse animation follows the brief impact pose");
+  assert(!dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "IMPACT"), "the impact marker clears after its brief hold");
+}
 console.log("rendering tests passed");

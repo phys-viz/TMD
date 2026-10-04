@@ -5,6 +5,8 @@
   const g = 9.81;
   const dangerSway = 0.2;
   const hydraulicDamperCount = 2;
+  const hydraulicBodyPx = 44;
+  const pendulumAngleScale = 2.5;
   const earthquakeDuration = 3.0;
   const earthquakeStrengths = Object.freeze({ gentle: 0.18, moderate: 0.62, strong: 0.65 });
   const labTowerLimits = Object.freeze({
@@ -137,17 +139,21 @@
 
   function damperCoeff(tower, damper) {
     const d = clampDamper(damper);
-    if (d.damping >= 0.999) return 0;
+    if (d.damping >= 1) return 0;
     const m = tower.mass * d.massRatio;
-    return hydraulicDamperCount * d.damping * 2 * m * Math.sqrt(g * d.length);
+    // Match the existing control through 0.8, then approach infinite resistance.
+    const resistance = d.damping <= 0.8 ? d.damping :
+      0.8 + (d.damping - 0.8) / (5 * (1 - d.damping));
+    return hydraulicDamperCount * resistance * 2 * m * Math.sqrt(g * d.length);
   }
 
   function derivatives(state, tower, damper, pulse) {
     const bm = baseMotion(state.t, pulse);
     const rel = state.x - bm.y;
     const relv = state.v - bm.yd;
-    if (damper && damper.enabled && clampDamper(damper).damping >= 0.999) {
-      return { t: 1, x: state.v, v: (-tower.damping * relv - tower.stiffness * rel) / tower.mass, th: 0, w: 0, heat: 0 };
+    if (damper && damper.enabled && clampDamper(damper).damping >= 1) {
+      const attachedMass = tower.mass * clampDamper(damper).massRatio;
+      return { t: 1, x: state.v, v: (-tower.damping * relv - tower.stiffness * rel) / (tower.mass + attachedMass), th: 0, w: 0, heat: 0 };
     }
     if (!damper || !damper.enabled) {
       return { t: 1, x: state.v, v: (-tower.damping * relv - tower.stiffness * rel) / tower.mass, th: 0, w: 0, heat: 0 };
@@ -204,22 +210,96 @@
     };
   }
 
-  function applyWallImpact(state, tower, damper) {
+  function highResistanceStep(state, dt, tower, damper, pulse) {
+    const M = tower.mass, m = M * damper.massRatio, L = damper.length;
+    const totalMass = M + m, b = damperCoeff(tower, damper);
+    // Horizontal momentum per unit total mass eliminates the stiff torque
+    // from the tower equation. Integrate angular drag exponentially, including
+    // its forcing and heat, so even settings arbitrarily close to 1 stay stable.
+    const momentum = state.v + m * L * Math.cos(state.th) * state.w / totalMass;
+    function advance(h, at) {
+      const bm = baseMotion(at.t, pulse);
+      const force = -tower.damping * (at.v - bm.yd) - tower.stiffness * (at.x - bm.y);
+      const sin = Math.sin(at.th), cos = Math.cos(at.th);
+      const inertia = m * L * L * (M + m * sin * sin) / totalMass;
+      const rate = b / inertia;
+      const angularForce = (-g * sin - cos * force / totalMass -
+        m * L * cos * sin * at.w * at.w / totalMass) * totalMass / (L * (M + m * sin * sin));
+      const steadyOmega = angularForce / rate;
+      const loss = -Math.expm1(-rate * h);
+      const responseTime = loss / rate;
+      const angleChange = state.w * responseTime + steadyOmega * (h - responseTime);
+      const omega = state.w * (1 - loss) + steadyOmega * loss;
+      const theta = state.th + angleChange;
+      const transient = state.w - steadyOmega;
+      const heat = inertia * (steadyOmega * steadyOmega * rate * h +
+        2 * steadyOmega * transient * loss + transient * transient * -Math.expm1(-2 * rate * h) / 2);
+      return {
+        ...state, t: state.t + h,
+        x: state.x + momentum * h + force / totalMass * h * h / 2 - m * L * cos / totalMass * angleChange,
+        v: momentum + force / totalMass * h - m * L * Math.cos(theta) / totalMass * omega,
+        th: theta, w: omega, heat: (state.heat || 0) + Math.max(0, heat), lastHit: 0
+      };
+    }
+    const midpoint = advance(dt / 2, state);
+    return advance(dt, midpoint);
+  }
+
+  function pendulumGeometry(tower, damper, sway = 0) {
+    const d = clampDamper(damper);
+    const heightFraction = clamp((tower.height - labTowerLimits.minHeight) /
+      (labTowerLimits.maxHeight - labTowerLimits.minHeight), 0, 1);
+    const top = 118 - 60 * heightFraction, bottom = 436, pivotY = top + 2;
+    const lengthPx = clamp(d.length * 15, 45, 190);
+    const bobRadiusPx = clamp(9 + d.massRatio * 190, 11, 23);
+    // Keep mounts above the bob for short pendulums, leaving room for each
+    // rigid housing; longer pendulums use the same upper-column mounting area.
+    const anchorY = top + clamp(lengthPx - 70, 16, 60);
+    const mountSlope = sway * 132 / (bottom - top);
+    const shearOffset = -mountSlope * (anchorY - top);
+    const leftAnchorOffset = -108 + shearOffset, rightAnchorOffset = 108 + shearOffset;
+    const columnWidth = 4 + 4 * clamp((tower.mass - labTowerLimits.minMass) /
+      (labTowerLimits.maxMass - labTowerLimits.minMass), 0, 1);
+    return { lengthPx, bobRadiusPx, anchorY, leftAnchorOffset, rightAnchorOffset, mountSlope, columnWidth, top, pivotY };
+  }
+
+  function pendulumContact(tower, damper, theta, sway = 0) {
+    const d = clampDamper(damper);
+    if (!d.enabled || d.damping >= 1) return null;
+    const g = pendulumGeometry(tower, d, sway);
+    const bobX = g.lengthPx * Math.sin(theta * pendulumAngleScale);
+    const bobY = g.pivotY + g.lengthPx * Math.cos(theta * pendulumAngleScale);
+    const normalLength = Math.hypot(1, g.mountSlope);
+    let nearest = null;
+    for (const side of [-1, 1]) {
+      const clearance = (108 - side * (bobX + g.mountSlope * (bobY - g.top))) / normalLength - g.columnWidth / 2 - g.bobRadiusPx;
+      const wall = { clearance, side, kind: "wall", x: bobX + side * g.bobRadiusPx / normalLength, y: bobY + side * g.bobRadiusPx * g.mountSlope / normalLength };
+      if (!nearest || clearance < nearest.clearance) nearest = wall;
+      if (d.damping > 0.001) {
+        const anchorX = side < 0 ? g.leftAnchorOffset : g.rightAnchorOffset;
+        const dx = bobX - anchorX, dy = bobY - g.anchorY, distance = Math.hypot(dx, dy);
+        // The round housing tip extends four pixels beyond its rigid centerline.
+        const housing = { clearance: distance - hydraulicBodyPx - 4 - g.bobRadiusPx, side, kind: "housing",
+          x: anchorX + dx / distance * (hydraulicBodyPx + 4), y: g.anchorY + dy / distance * (hydraulicBodyPx + 4) };
+        if (housing.clearance < nearest.clearance) nearest = housing;
+      }
+    }
+    return nearest;
+  }
+
+  function applyWallImpact(state, tower, damper, contact) {
     if (!damper || !damper.enabled) return state;
     const d = clampDamper(damper);
-    const limit = Math.max(0.15, d.wallLimit - d.bobRadius);
-    const bobX = d.length * Math.sin(state.th);
-    const movingOut = Math.sign(bobX) * state.w * Math.cos(state.th) > 0;
-    if (Math.abs(bobX) <= limit || !movingOut) return state;
-    const side = Math.sign(bobX);
+    if (d.damping >= 1) return state;
+    if (!contact || contact.clearance > 0) return state;
     const wBefore = state.w;
-    state.th = side * Math.asin(clamp(limit / d.length, -0.98, 0.98));
     state.w = -d.restitution * state.w;
     const m = tower.mass * d.massRatio;
     const severity = m * d.length * Math.abs(wBefore - state.w);
     state.hits = (state.hits || 0) + 1;
     state.hitSeverity = (state.hitSeverity || 0) + severity;
     state.lastHit = severity;
+    state.contact = contact;
     return state;
   }
 
@@ -256,17 +336,40 @@
 
   function stepSimulation(state, dt, tower, damper, pulse) {
     const maxDt = 0.004;
+    const d = damper && damper.enabled ? clampDamper(damper) : null;
+    const locked = d && d.damping >= 1;
+    const highResistance = d && d.damping > 0.8 && !locked;
     let next = { ...state, lastHit: 0 };
+    if (locked) { next.th = 0; next.w = 0; }
     let remaining = Math.max(0, dt);
     while (remaining > 1e-9) {
       const h = Math.min(maxDt, remaining);
-      next = rk4Step(next, h, tower, damper, pulse);
-      if (damper && damper.enabled && clampDamper(damper).damping >= 0.999) {
+      const before = next;
+      const advance = step => highResistance ? highResistanceStep(before, step, tower, d, pulse) : rk4Step(before, step, tower, damper, pulse);
+      next = advance(h);
+      if (locked) {
         next.th = 0;
         next.w = 0;
       }
-      next = applyWallImpact(next, tower, damper);
+      const contactAt = s => d ? pendulumContact(tower, d, s.th, s.x - baseMotion(s.t, pulse).y) : null;
+      let contact = contactAt(next);
+      if (contact && contact.clearance <= 0) {
+        const initialContact = contactAt(before);
+        if (initialContact && initialContact.clearance > 0) {
+          let low = 0, high = h;
+          // Locate actual surface contact within this integration step.
+          for (let i = 0; i < 24; i++) {
+            const middle = (low + high) / 2;
+            if (contactAt(advance(middle)).clearance <= 0) high = middle;
+            else low = middle;
+          }
+          next = advance(high);
+          contact = contactAt(next);
+        }
+        next = applyWallImpact(next, tower, damper, contact);
+      }
       remaining -= h;
+      if (next.hits > (state.hits || 0)) break;
     }
     return next;
   }
@@ -350,6 +453,7 @@
       const d = clampDamper(damper);
       const m = tower.mass * d.massRatio;
       e += 0.5 * m * Math.pow(state.v + d.length * Math.cos(state.th) * state.w, 2);
+      e += 0.5 * m * Math.pow(d.length * Math.sin(state.th) * state.w, 2);
       e += m * g * d.length * (1 - Math.cos(state.th));
     }
     return e;
@@ -359,6 +463,10 @@
     g,
     dangerSway,
     hydraulicDamperCount,
+    hydraulicBodyPx,
+    pendulumAngleScale,
+    pendulumGeometry,
+    pendulumContact,
     earthquakeDuration,
     earthquakeStrengths,
     labTowerLimits,

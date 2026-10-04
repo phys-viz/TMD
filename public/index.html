@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=compact-header-14">
+  <link rel="stylesheet" href="/styles.css?v=damping-slider-15">
 </head>
 <body>
   <header class="topbar">
@@ -62,9 +62,9 @@
             <p>A simplified 3.0-second earthquake shakes the ground and starts the tower moving. After that, the foundation stops and the graph shows free motion. Sway means roof displacement relative to the foundation, x - y.</p>
             <p class="formula">T = 2*pi*sqrt(L/g) and L = g*(T/2*pi)^2</p>
             <p>Tower height and mass use a classroom calibration: taller or heavier towers have longer natural periods, kept within a range suited to stopwatch measurements. The drawing is schematic; taller towers are drawn taller and heavier towers have thicker columns. Keep the same tower settings when comparing TMD designs.</p>
-            <p>Two hydraulic dampers remove mechanical energy from pendulum motion. At zero damping, the hydraulic dampers are removed.</p>
+            <p>Two hydraulic dampers remove mechanical energy from pendulum motion. At zero damping, they are removed. Resistance rises toward a lock at exactly 1.00; near lock, less relative motion can mean less energy absorbed. A locked TMD still adds its mass to the tower.</p>
             <p>Compare mode uses identical towers and the same earthquake with independent TMD settings. Start, Pause, and Reset apply to both. Each tower has its own graph below it, with editable start and end times on its bottom axis and separate measurement cursors. Set the limits to 0 and 120 seconds to see the full trial. The graphs use matching sway scales.</p>
-            <p>One pendulum wall hit collapses that tower in every difficulty mode. Low damping and a small TMD mass can produce hits. The drawing limits displayed swing to leave room for hydraulic housings. A failed tower's graph identifies the failure cause. Impact losses are separate from hydraulic thermal energy.</p>
+            <p>One pendulum wall hit collapses that tower in every difficulty mode. Low damping and a small TMD mass can produce hits. The bob must touch a wall or hydraulic housing to register a collision. The impact is shown briefly before the tower collapses. A failed tower's graph identifies the failure cause. Impact losses are separate from hydraulic thermal energy.</p>
             <p>Danger rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the earthquake and builds while roof sway is beyond the tower's game sway limit: <span id="labSwayLimit"></span> m. This tolerance varies by tower to keep challenges achievable; it is not a real structural prediction.</p>
           </details>
         </aside>
@@ -74,11 +74,11 @@
               <div class="control-block tmd-controls" role="group" aria-labelledby="compareTmdHeading">
                 <div class="tmd-settings-row">
                   <h3 id="compareTmdHeading">Tower A</h3>
-                  <label class="check"><input id="compareDamperEnabled" type="checkbox"> Install TMD</label>
+                  <label class="check" title="Install TMD"><input id="compareDamperEnabled" type="checkbox" aria-label="Install Tower A TMD"> TMD</label>
                   <div class="field-row three">
                     <label>Length (m)<input id="compareLengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4" title="Length: 0.7–18 m"></label>
                     <label>Mass (%)<input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <label>Damping<input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0.45" title="0: no damping; 1: pendulum locked"></label>
+                    <div class="damping-field"><label for="compareDampingInput">Damping</label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Tower A damping" title="0: free; resistance rises toward 1: locked"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0.45" title="0: no damping; only 1.00 locks the pendulum"></div></div>
                   </div>
                 </div>
               </div>
@@ -98,11 +98,11 @@
               <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
                 <div class="tmd-settings-row">
                   <h3 id="tmdHeading">Tower</h3>
-                  <label class="check"><input id="damperEnabled" type="checkbox" checked> Install TMD</label>
+                  <label class="check" title="Install TMD"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD" checked> TMD</label>
                   <div class="field-row three">
                     <label>Length (m)<input id="lengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4" title="Length: 0.7–18 m"></label>
                     <label>Mass (%)<input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <label>Damping<input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0.45" title="0: no damping; 1: pendulum locked"></label>
+                    <div class="damping-field"><label for="dampingInput">Damping</label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Tower damping" title="0: free; resistance rises toward 1: locked"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0.45" title="0: no damping; only 1.00 locks the pendulum"></div></div>
                   </div>
                 </div>
               </div>
@@ -195,7 +195,7 @@
     </section>
   </main>
 
-  <script src="/physics.js?v=natural-damping-6"></script>
-  <script src="/app.js?v=inline-tower-controls-11"></script>
+  <script src="/physics.js?v=surface-contact-9"></script>
+  <script src="/app.js?v=surface-contact-15"></script>
 </body>
 </html>

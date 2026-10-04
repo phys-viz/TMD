@@ -60,8 +60,8 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
 }
 
 {
-  const loose = { ...P.defaultDamperFor(tower), damping: 0, wallLimit: 1.2 };
-  const hitRun = P.simulate({ tower, damper: loose, pulse: { ...pulse, amplitude: 1.25 }, duration: 35 });
+  const loose = { ...P.defaultDamperFor(tower), damping: 0 };
+  const hitRun = P.simulate({ tower, damper: loose, pulse: { ...pulse, amplitude: 4 }, duration: 35, stopOnHit: true });
   assert(hitRun.hits > 0, "low damping can strike the building wall");
   assert(hitRun.hitSeverity > 0, "wall hits record severity");
   close(hitRun.heat, 0, 1e-9, "wall impacts do not count as damper heat");
@@ -220,5 +220,105 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
   });
   const retained = free.final.x / 0.2;
   assert(retained > 0.82 && retained < 0.88, "no-TMD sway retains about 85 percent of its initial amplitude after five cycles");
+}
+
+function contactAngle(tower, damper, side, sway = 0) {
+  let low = 0, high = 0;
+  for (let angle = 0.001; angle < Math.PI / (2 * P.pendulumAngleScale); angle += 0.001) {
+    if (P.pendulumContact(tower, damper, side * angle, sway).clearance <= 0) { high = angle; break; }
+    low = angle;
+  }
+  assert(high > low, "fixture has a reachable visible contact");
+  for (let i = 0; i < 35; i++) {
+    const mid = (low + high) / 2;
+    if (P.pendulumContact(tower, damper, side * mid, sway).clearance <= 0) high = mid; else low = mid;
+  }
+  return side * high;
+}
+{
+  const labTower = P.createLabTower(345, 11.5e6);
+  const design = { ...P.defaultDamperFor(labTower), massRatio: 0.08 };
+  const quake = { ...P.defaultPulse(), dangerEnabled: false };
+  const runAt = damping => P.simulate({ tower: labTower, damper: { ...design, damping }, pulse: quake, duration: 30 });
+  const locked = runAt(1);
+  const attached = P.simulate({ tower: { ...labTower, mass: labTower.mass * 1.08 }, damper: { enabled: false }, pulse: quake, duration: 30 });
+  const bare = P.simulate({ tower: labTower, damper: { enabled: false }, pulse: quake, duration: 30 });
+  const difference = (a, b) => Math.max(...a.samples.map((s, i) => Math.abs(s.sway - b.samples[i].sway)));
+  close(difference(locked, attached), 0, 1e-10, "locked TMD behaves as attached mass with unchanged tower stiffness and damping");
+  assert(difference(locked, bare) > 0.02, "locked TMD is distinct from removing its mass");
+  let previousError = Infinity, previousAngle = Infinity, previousHeat = Infinity;
+  for (const damping of [0.99, 0.999, 0.9999, 1 - 1e-10]) {
+    const run = runAt(damping);
+    const error = difference(run, locked);
+    const angle = Math.max(...run.samples.map(s => Math.abs(s.theta)));
+    assert(error < previousError && angle < previousAngle && run.heat < previousHeat, "motion and hydraulic heat approach the locked limit smoothly");
+    assert(angle > 0 && run.heat > 0, "every setting below one still permits motion and dissipates heat");
+    assert(run.samples.every(s => [s.sway, s.theta, s.heat].every(Number.isFinite)), "near-lock states remain finite");
+    previousError = error; previousAngle = angle; previousHeat = run.heat;
+  }
+  assert(previousError < 0.00001, "extreme resistance matches the locked waveform within ten micrometers");
+  assert(difference(runAt(0.8), runAt(0.8000001)) < 0.00001, "integration and resistance remain continuous at the high-resistance transition");
+  for (const length of [0.7, 18]) for (const massRatio of [0.01, 0.1]) {
+    const run = P.simulate({ tower: labTower, damper: { ...design, length, massRatio, damping: 1 - Number.EPSILON }, pulse: quake, duration: 8 });
+    assert(Object.values(run.final).every(Number.isFinite), "near-lock integration stays stable at all length and mass bounds");
+    assert(run.heat >= 0 && run.hits === 0, "near-lock resistance does not create heat loss or spurious impacts");
+  }
+  for (const damping of [0.81, 0.99, 1 - 1e-10]) {
+    const conservativeTower = { ...labTower, damping: 0 };
+    const damper = { ...design, damping };
+    const noQuake = { amplitude: 0 };
+    let state = P.initialState({ initialX: 0.03, initialTheta: 0.01, initialOmega: 0.03 });
+    const energy = P.mechanicalEnergy(state, conservativeTower, damper, noQuake);
+    for (let i = 0; i < 1000; i++) {
+      const previous = state.heat;
+      state = P.stepSimulation(state, 0.004, conservativeTower, damper, noQuake);
+      assert(state.heat >= previous, "exponential drag never decreases accumulated heat");
+    }
+    assert.strictEqual(state.hits, 0, "hydraulic energy check stays inside the contact limit");
+    close((P.mechanicalEnergy(state, conservativeTower, damper, noQuake) + state.heat) / energy, 1, 0.00002, "high-resistance mechanical energy becomes hydraulic heat");
+  }
+}
+{
+  const scenario = P.createLabTower(345, 11.5e6);
+  const noQuake = { amplitude: 0, dangerEnabled: false };
+  for (const damping of [0, 0.1]) for (const side of [-1, 1]) {
+    const damper = { ...P.defaultDamperFor(scenario), length: damping > 0 ? 8.4 : 10.3, damping, massRatio: 0.01 };
+    const limitAngle = contactAngle(scenario, damper, side);
+    const inside = P.initialState({ initialTheta: limitAngle - side * 0.001, initialOmega: side * 0.2 });
+    const before = P.stepSimulation(inside, 0.001, scenario, damper, noQuake);
+    assert.strictEqual(before.hits, 0, "motion inside the displayed travel limit is not a hit");
+    const hit = P.stepSimulation(before, 0.01, scenario, damper, noQuake);
+    assert.strictEqual(hit.hits, 1, "reaching either displayed swing limit produces one wall hit");
+    const contact = P.pendulumContact(scenario, damper, hit.th, hit.x);
+    close(contact.clearance, 0, 0.000001, "impact is localized to touching drawn surfaces with no safety gap");
+    assert.strictEqual(contact.side, side, "the correct side registers contact");
+    assert.strictEqual(contact.kind, damping > 0 ? "housing" : "wall", "actual housing tips and wall surfaces both register contact");
+    assert(hit.hitSeverity > 0, "displayed contact records physical impact severity");
+    assert(hit.t < before.t + 0.01, "integration stops at the contact substep");
+    if (damping === 0) close(hit.heat, 0, 1e-12, "displayed contact adds no hydraulic heat");
+  }
+  const damper = { ...P.defaultDamperFor(scenario), length: 10.3, damping: 0, massRatio: 0.01 };
+  const strong = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, dangerEnabled: false };
+  const result = P.evaluateDesign(scenario, damper, strong);
+  assert.strictEqual(result.status, "failed", "low-damping displayed contact fails official scoring even on Easy");
+  assert.strictEqual(result.hits, 1, "official scoring ends on the first displayed contact");
+  assert(result.samples.slice(0, -1).every(s => P.pendulumContact(scenario, damper, s.theta, s.sway).clearance > 0), "recorded motion stays clear of drawn surfaces until collapse");
+  const finalSample = result.samples.at(-1);
+  close(P.pendulumContact(scenario, damper, finalSample.theta, finalSample.sway).clearance, 0, 0.000001, "official scoring ends at visible surface contact");
+  assert.strictEqual(P.pendulumContact(scenario, damper, finalSample.theta, finalSample.sway).kind, "wall", "Strong can produce a visible building-wall impact");
+  const housingDesign = { ...damper, length: 9, damping: 0.01 };
+  const housingRun = P.evaluateDesign(scenario, housingDesign, strong);
+  assert.strictEqual(housingRun.status, "failed", "a preset-driven outer-housing impact is terminal even on Easy");
+  assert.strictEqual(housingRun.hits, 1, "the first outer-housing impact ends the trial");
+  const housingSample = housingRun.samples.at(-1);
+  const housingContact = P.pendulumContact(scenario, housingDesign, housingSample.theta, housingSample.sway);
+  assert.strictEqual(housingContact.kind, "housing", "actual student controls and Strong forcing can strike an outer cylinder");
+  close(housingContact.clearance, 0, 0.000001, "the preset-driven housing impact has actual surface contact");
+  const safeDesign = { ...damper, length: 10.3, massRatio: 0.08, damping: 0.25 };
+  const safeRun = P.evaluateDesign(scenario, safeDesign, { ...strong, dangerEnabled: true, collapseTime: 2.5, collapseSway: scenario.dangerSwayLimit });
+  assert.strictEqual(safeRun.status, "standing", "the same tower and Strong earthquake have a successful design below maximum mass on Hard");
+  assert.strictEqual(safeRun.hits, 0, "a successful design clears both the building and its outer cylinders");
+  const disabled = P.stepSimulation(P.initialState({ initialTheta: 0.5, initialOmega: 1 }), 0.01, scenario, { ...damper, enabled: false }, noQuake);
+  assert.strictEqual(disabled.hits, 0, "removing the TMD removes its contact failure");
 }
 console.log("physics tests passed");

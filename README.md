@@ -49,10 +49,10 @@ npm.cmd test
 - Danger time is based on visible roof sway, not hidden velocity/envelope values.
 - Each tower has a visible game sway threshold: round(0.20 * max(1, (6 / natural_period)^2), 2) m, displayed in the solo model notes and student challenge readout. This balances the shorter-period scenarios while retaining a common classroom earthquake; it is a classroom game rule, not a structural prediction.
 - The TMD mass range is 1-10% of the building mass.
-- Two hydraulic dampers act in parallel. At damping 0, they disappear. At damping 1, the pendulum is locked.
+- Two hydraulic dampers act in parallel. The compact slider and two-decimal numeric field stay synchronized. At damping 0, the dampers disappear. Resistance increases nonlinearly above 0.8, progressively restricting motion and approaching a true lock at exactly 1.00. A locked bob still adds its mass to the tower; it is not equivalent to removing the TMD.
 - Earthquake amplitude settings are Gentle 0.18 m, Moderate 0.62 m, and Strong 0.65 m (waveform coefficients, not magnitudes or exact peak ground displacements). Moderate is calibrated so the default tower needs a useful TMD design to survive Medium.
 - Strong/Hard is calibrated for a tuned 8% mass TMD, leaving the 10% maximum as reserve. Successful designs remain sensitive to damping and length.
-- Hydraulic cylinder housings have a fixed visual length; their piston rods slide as the bob moves. The schematic limits the displayed swing to leave room for the housings.
+- Hydraulic cylinder housings have a fixed visual length; their piston rods slide as the bob moves. Housings are mounted directly on the moving columns, and their mounting plates follow the column angle. Contact detection uses the same bob, housing-tip, and column surfaces as the drawing, without an invisible safety margin or display clamp. Integration locates the first surface contact within its timestep. The tower fails at contact, then holds the visible impact pose with a marker for 0.45 s before the collapse animation. The schematic uses 2.5× angular magnification and 15 pixels per meter of pendulum length, bounded to 45–190 pixels, preserving useful designs below maximum mass.
 - Thermal energy is calculated from damping power; its solo numeric display is deferred. Hydraulic cylinder colors warm smoothly from gray toward a muted red over a broader heat range; calculated heat is unchanged.
 - Wall impacts are simulated from bob position and radius. The first wall hit collapses that tower on every difficulty, including Easy, and its graph identifies the failure cause. Official challenge scoring also fails a design at its first wall hit and stops that design's simulation there.
 
@@ -78,7 +78,9 @@ L = g*(T/2*pi)^2
 Hydraulic damping removes mechanical energy from pendulum motion. The damping coefficient is:
 
 ```text
-b = damper_count * damping_setting * 2*m*sqrt(g*L)
+resistance(d) = d                              for 0 <= d <= 0.8
+resistance(d) = 0.8 + (d - 0.8)/(5*(1 - d))    for 0.8 < d < 1
+b = damper_count * resistance(d) * 2*m*sqrt(g*L)
 ```
 
 Thermal power is:
@@ -93,7 +95,9 @@ Each timestep adds:
 thermal_energy += P * dt
 ```
 
-So zero damping produces no thermal energy, and locked damping produces no thermal energy because the pendulum does not move.
+The resistance curve matches the original mapping and slope at 0.8 and grows without bound as the setting approaches 1. At exactly 1, the pendulum is constrained to vertical and the tower's moving mass is `M + m`, with its original stiffness and building damping. Zero damping produces no thermal energy, and locked damping produces no hydraulic thermal energy because the pendulum does not move. Increasing resistance toward lock can reduce heat dissipation and TMD effectiveness as relative motion disappears.
+
+Internal steps remain at most 0.004 s. Settings through 0.8 use RK4; higher resistance uses an exponential midpoint method in horizontal momentum and pendulum angular velocity, including the integrated damping heat. This avoids numerical instability near the lock endpoint while approaching the same attached-mass motion. Mechanical energy includes both horizontal and vertical bob velocity.
 
 ## GitHub Workflow
 

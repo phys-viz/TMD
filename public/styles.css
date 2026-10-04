@@ -407,7 +407,7 @@ canvas {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 6px 10px;
+  gap: 6px;
 }
 .stage-wrap .tmd-controls .check {
   display: flex;
@@ -422,11 +422,29 @@ canvas {
   margin: 0;
 }
 .stage-wrap .tmd-controls .field-row.three {
-  grid-template-columns: repeat(3, 3.7rem);
+  grid-template-columns: 3.7rem 3.7rem 7rem;
   flex: 0 0 auto;
-  gap: 6px;
+  gap: 4px;
 }
 .stage-wrap .tmd-controls .field-row label { font-size: .7rem; white-space: nowrap; }
+.damping-field { display: grid; gap: 3px; }
+.damping-control { display: flex; align-items: center; gap: 2px; }
+.stage-wrap .tmd-controls .damping-control input[type="range"] {
+  width: 64px;
+  min-width: 0;
+  min-height: 26px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--section-accent);
+}
+.stage-wrap .tmd-controls .damping-control input[type="number"] {
+  width: 43px;
+  padding-inline: 2px;
+  font-size: .7rem;
+  appearance: textfield;
+}
+.damping-control input::-webkit-inner-spin-button,
+.damping-control input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .stage-wrap .tmd-controls input[type="number"] {
   min-width: 0;
   min-height: 26px;

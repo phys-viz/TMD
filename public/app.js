@@ -20,7 +20,7 @@ const graphWindows = [{ start: 0, end: 120 }, { start: 0, end: 120 }];
 const RUN_DURATION = 120;
 const EARTHQUAKE_DURATION = P.earthquakeDuration;
 const EARTHQUAKE_STRENGTHS = P.earthquakeStrengths;
-const HYDRAULIC_BODY_PX = 44;
+const HYDRAULIC_BODY_PX = P.hydraulicBodyPx;
 const DANGER_SWAY = 0.2;
 const DIFFICULTY = {
   easy: { label: "Easy", dangerEnabled: false, collapseSway: DANGER_SWAY, collapseTime: 3 },
@@ -154,6 +154,11 @@ function labRuns() {
 
 function updateLabels() {
   $("labSwayLimit").textContent = fmt(labTower.dangerSwayLimit);
+  [["dampingInput", "dampingSlider"], ["compareDampingInput", "compareDampingSlider"]].forEach(([inputId, sliderId]) => {
+    const value = P.clamp(Number($(inputId).value), 0, 1);
+    $(sliderId).value = value;
+    $(sliderId).setAttribute("aria-valuetext", value === 1 ? "1.00, locked" : `${fmt(value, 2)}, resistance`);
+  });
 }
 
 function applyTowerInputs() {
@@ -186,7 +191,7 @@ function stepRun(run, dt) {
   if (sample.hits > 0 || P.dangerLimitReached(run.overLimitTime, run.pulse)) {
     run.failed = true;
     run.failedAt = run.state.t;
-    run.failureCause = sample.hits > 0 ? "Wall hit — failed" : "Danger limit — failed";
+    run.failureCause = sample.hits > 0 ? "Collision — failed" : "Danger limit — failed";
     appendSample(run);
     return;
   }
@@ -217,7 +222,7 @@ function strutHeatColor(energy, scale) {
   return `rgb(${r},${g},${b})`;
 }
 
-function drawHydraulicDamper(ctx, anchorX, anchorY, bobX, bobY, bobR, side, warmColor) {
+function drawHydraulicDamper(ctx, anchorX, anchorY, bobX, bobY, bobR, side, warmColor, mountSlope = 0) {
   const dx = bobX - anchorX;
   const dy = bobY - anchorY;
   const dist = Math.max(1, Math.hypot(dx, dy));
@@ -235,8 +240,8 @@ function drawHydraulicDamper(ctx, anchorX, anchorY, bobX, bobY, bobR, side, warm
   ctx.strokeStyle = "#4f626d";
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(anchorX, anchorY - mountDepth);
-  ctx.lineTo(anchorX, anchorY + mountDepth);
+  ctx.moveTo(anchorX + mountSlope * mountDepth, anchorY - mountDepth);
+  ctx.lineTo(anchorX - mountSlope * mountDepth, anchorY + mountDepth);
   ctx.stroke();
   ctx.fillStyle = "#4f626d";
   ctx.beginPath();
@@ -427,8 +432,10 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     ctx.restore();
   }
 
-  if (run.failed) {
-    const p = P.clamp(run.collapseAge / 2.2, 0, 1);
+  const impactHold = run.state.contact ? 0.45 : 0;
+  const showContact = run.failed && run.collapseAge < impactHold;
+  if (run.failed && !showContact) {
+    const p = P.clamp((run.collapseAge - impactHold) / (2.2 - impactHold), 0, 1);
     const impact = Math.max(0, 1 - run.collapseAge / 0.45);
     const shakeX = Math.sin(run.collapseAge * 60) * 5 * impact;
     const shakeY = Math.cos(run.collapseAge * 47) * 3 * impact;
@@ -538,29 +545,22 @@ function drawStage(sample, run = sim, canvasId = "stage") {
   ctx.fill();
   ctx.restore();
 
-  if (d.enabled && !run.failed) {
+  if (d.enabled && (!run.failed || showContact)) {
     const pivotX = roofX;
     const pivotY = top + 2;
-    const Lpx = P.clamp(d.length * 13, 45, 190);
-    const bobR = P.clamp(9 + d.massRatio * 190, 11, 23);
-    const drawTheta = P.clamp(sample.theta * 3.35, -1.05, 1.05);
-    const isLocked = d.damping >= 0.999;
+    const geometry = P.pendulumGeometry(run.tower, d, sample.sway);
+    const Lpx = geometry.lengthPx;
+    const bobR = geometry.bobRadiusPx;
+    const drawTheta = sample.theta * P.pendulumAngleScale;
+    const isLocked = d.damping >= 1;
     const showHydraulics = d.damping > 0.001 && !isLocked;
-    const wallOffset = towerWidth / 2 - 12;
-    const anchorDrop = Math.sqrt(Math.max(0, Lpx * Lpx - wallOffset * wallOffset));
-    const anchorY = P.clamp(pivotY + anchorDrop, top + 60, bottom - 42);
-    const leftAnchorX = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, anchorY) + 4;
-    const rightAnchorX = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, anchorY) - 4;
-    const maxBobOffset = towerWidth / 2 - bobR - 12;
-    let drawOffset = P.clamp(Math.sin(drawTheta) * Lpx, -maxBobOffset, maxBobOffset);
-    if (showHydraulics) {
-      // Reserve housing and piston clearance in the schematic cutaway so the bob
-      // never hides the rigid cylinder or pushes the rod back through its end.
-      const clearance = bobR + HYDRAULIC_BODY_PX + 8;
-      drawOffset = P.clamp(drawOffset, leftAnchorX + clearance - pivotX, rightAnchorX - clearance - pivotX);
-    }
+    const anchorY = geometry.anchorY;
+    const leftAnchorX = pivotX + geometry.leftAnchorOffset;
+    const rightAnchorX = pivotX + geometry.rightAnchorOffset;
+    // Use the same column mounts and bob position as the contact detector.
+    const drawOffset = Math.sin(drawTheta) * Lpx;
     const bobX = pivotX + drawOffset;
-    const bobY = pivotY + Math.sqrt(Math.max(0, Lpx * Lpx - drawOffset * drawOffset));
+    const bobY = pivotY + Math.cos(drawTheta) * Lpx;
     const warmColor = strutHeatColor(sample.heat, run.energyScale);
 
     ctx.strokeStyle = "#1e2d36";
@@ -572,7 +572,6 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     ctx.stroke();
 
     if (showHydraulics || isLocked) {
-
       if (isLocked) {
         drawLockBrace(ctx, leftAnchorX, anchorY, bobX, bobY, bobR);
         drawLockBrace(ctx, rightAnchorX, anchorY, bobX, bobY, bobR);
@@ -583,8 +582,8 @@ function drawStage(sample, run = sim, canvasId = "stage") {
         ctx.fillText("LOCKED", pivotX, anchorY - 10);
         ctx.restore();
       } else {
-        drawHydraulicDamper(ctx, leftAnchorX, anchorY, bobX, bobY, bobR, -1, warmColor);
-        drawHydraulicDamper(ctx, rightAnchorX, anchorY, bobX, bobY, bobR, 1, warmColor);
+        drawHydraulicDamper(ctx, leftAnchorX, anchorY, bobX, bobY, bobR, -1, warmColor, geometry.mountSlope);
+        drawHydraulicDamper(ctx, rightAnchorX, anchorY, bobX, bobY, bobR, 1, warmColor, geometry.mountSlope);
       }
     }
 
@@ -600,6 +599,25 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     ctx.arc(bobX, bobY, bobR, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowColor = "transparent";
+    if (showContact) {
+      const contact = run.state.contact;
+      const contactX = pivotX + contact.x, contactY = contact.y;
+      ctx.save();
+      ctx.strokeStyle = "#c65621";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(contactX + 7 * Math.cos(angle), contactY + 7 * Math.sin(angle));
+        ctx.lineTo(contactX + 13 * Math.cos(angle), contactY + 13 * Math.sin(angle));
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#a74319";
+      ctx.font = "bold 12px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("IMPACT", contactX, contactY - 19);
+      ctx.restore();
+    }
   }
 }
 
@@ -755,6 +773,7 @@ function renderLab() {
 }
 
 function resetLab() {
+  updateLabels();
   graphCursors = [];
   compareGraphCursors = [];
   makeSim();
@@ -896,6 +915,12 @@ function animateCity() {
   "compareLengthInput", "compareMassInput", "compareDampingInput", "compareDamperEnabled"].forEach(id => {
   $(id).addEventListener("input", () => {
     updateLabels();
+    resetLab();
+  });
+});
+[["dampingSlider", "dampingInput"], ["compareDampingSlider", "compareDampingInput"]].forEach(([sliderId, inputId]) => {
+  $(sliderId).addEventListener("input", () => {
+    $(inputId).value = fmt(Number($(sliderId).value), 2);
     resetLab();
   });
 });
