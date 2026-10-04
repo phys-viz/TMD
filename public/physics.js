@@ -105,7 +105,7 @@
     const maxSize = Math.sqrt((limits.maxHeight / limits.minHeight) * (limits.maxMass / limits.minMass));
     const period = clamp(limits.minPeriod + (limits.maxPeriod - limits.minPeriod) *
       (size - 1) / (maxSize - 1), limits.minPeriod, limits.maxPeriod);
-    const dampingRatio = 0.0115;
+    const dampingRatio = 0.005;
     const stiffness = cleanMass * Math.pow(2 * Math.PI / period, 2);
     return {
       name: "Lab tower",

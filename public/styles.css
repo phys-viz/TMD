@@ -25,10 +25,11 @@ body {
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 14px 24px;
+  gap: 8px 16px;
+  padding: 8px 24px;
   background: #17252d;
   color: white;
   border-bottom: 0;
@@ -45,7 +46,6 @@ h3 {
   color: #65727c;
 }
 p { margin: 6px 0 0; color: var(--muted); }
-.topbar p { color: #b8c7ce; font-size: .9rem; }
 
 .tabs, .button-row {
   display: flex;
@@ -369,7 +369,7 @@ canvas {
 
 .sim-area {
   display: grid;
-  grid-template-columns: minmax(300px, 420px) minmax(360px, 560px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
@@ -377,48 +377,70 @@ canvas {
 .stage-pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 28px;
   min-width: 0;
+  width: 100%;
+  max-width: 560px;
+  justify-self: center;
 }
 
-.stage-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 0 8px;
+.stage-wrap .tmd-controls {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto 8px;
+  padding: 6px 8px;
+  gap: 6px;
 }
-
-.tmd-state { color: var(--muted); font-size: .78rem; }
-.stage-wrap .tmd-controls { margin-bottom: 10px; }
-.stage-wrap canvas { width: 100%; max-width: 420px; height: auto; aspect-ratio: 420 / 760; }
-.sim-area.compare-mode { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
-.compare-mode .stage-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 736px; }
-.compare-mode #stage,
-.compare-mode #stageCompare { max-width: none; aspect-ratio: 420 / 740; }
-.compare-mode .graph-wrap { max-width: 560px; }
-.compare-mode .graph-tools { max-width: none; }
-.compare-mode #graph { max-width: none; aspect-ratio: 560 / 880; }
-
-.tower-observations {
+.stage-wrap .tmd-controls h3 {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--section-accent);
+  border-radius: 0;
+  font-size: .75rem;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+.tmd-settings-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 2px;
-  color: var(--muted);
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+}
+.stage-wrap .tmd-controls .check {
+  display: flex;
+  gap: 5px;
+  white-space: nowrap;
+  cursor: pointer;
+  font-size: .72rem;
+}
+.stage-wrap .tmd-controls .check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+.stage-wrap .tmd-controls .field-row.three {
+  grid-template-columns: repeat(3, 3.7rem);
+  flex: 0 0 auto;
+  gap: 6px;
+}
+.stage-wrap .tmd-controls .field-row label { font-size: .7rem; white-space: nowrap; }
+.stage-wrap .tmd-controls input[type="number"] {
+  min-width: 0;
+  min-height: 26px;
+  padding: 4px 5px;
   font-size: .8rem;
 }
-
-.tower-observations strong { margin-left: 4px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.hit-observation { border-radius: 4px; transition: background .2s, color .2s; }
-.hit-observation.impact { background: #ffe0c0; color: #8f350b; }
-.hit-observation.impact strong { color: inherit; }
-
-.graph-legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: .8rem; margin-bottom: 8px; }
-.trace-a::before, .trace-b::before { content: ""; display: inline-block; width: 22px; margin-right: 6px; vertical-align: middle; }
-.trace-a::before { border-top: 3px solid #0f7b7e; }
-.trace-b::before { border-top: 3px dashed #245e9b; }
+.stage-wrap > canvas {
+  --tower-view-height: clamp(240px, calc(100dvh - 360px), 585px);
+  width: min(100%, calc(var(--tower-view-height) * .875));
+  height: auto;
+  aspect-ratio: 420 / 480;
+  margin-inline: auto;
+}
+.compare-mode .stage-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1148px; }
 
 .stage-wrap,
 .graph-wrap {
@@ -426,38 +448,58 @@ canvas {
   min-width: 0;
 }
 
-.graph-tools {
+.graph-wrap { position: relative; margin-top: 8px; }
+.axis-time {
+  position: absolute;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: clamp(.64rem, 1vw, .8rem);
+  font-weight: 500;
+  color: #425160;
+}
+.axis-start { left: 8.57%; }
+.axis-end { right: 3.21%; }
+.axis-time input {
+  width: 4.7em;
+  min-height: 22px;
+  padding: 1px 2px;
+  border: 0;
+  border-bottom: 1px dashed #93adb5;
+  border-radius: 2px;
+  background: transparent;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.axis-end input { text-align: right; }
+.axis-time input::-webkit-inner-spin-button,
+.axis-time input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.axis-time input:hover, .axis-time input:focus {
+  background: white;
+  border-bottom-color: var(--accent);
+}
+.axis-time input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+#graph, #graphCompare {
   width: 100%;
   max-width: 560px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
-  gap: 6px;
-  align-items: end;
-  margin-bottom: 8px;
-}
-
-.graph-tools label {
-  font-size: .72rem;
-}
-
-.graph-tools button {
-  min-height: 28px;
-  padding: 0 9px;
-  font-size: .76rem;
-}
-
-#stage {
-  width: 100%;
-  max-width: 420px;
   height: auto;
-  aspect-ratio: 420 / 760;
-}
-
-#graph {
-  width: 100%;
-  max-width: 560px;
-  height: auto;
-  aspect-ratio: 560 / 620;
+  aspect-ratio: 560 / 170;
 }
 
 #cityCanvas {
@@ -506,18 +548,16 @@ th { color: #425160; }
   text-align: center;
 }
 
-@media (max-width: 1100px) {
-  .sim-area.compare-mode { grid-template-columns: minmax(0, 1fr); }
-}
-
 @media (max-width: 900px) {
-  .topbar, .city-head { align-items: stretch; flex-direction: column; }
+  .city-head { align-items: stretch; flex-direction: column; }
   .workbench, .two-col, .sim-area { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 560px) {
   main, .topbar { padding-left: 12px; padding-right: 12px; }
-  .graph-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .compare-mode .stage-pair { grid-template-columns: minmax(0, 1fr); }
   th:nth-child(5), td:nth-child(5), th:nth-child(7), td:nth-child(7) { display: none; }
+}
+
+@media (max-width: 680px) {
+  .compare-mode .stage-pair { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
 }

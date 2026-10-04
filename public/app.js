@@ -14,6 +14,8 @@ let events = null;
 let cityStart = 0;
 let lastCityStartedAt = 0;
 let graphCursors = [];
+let compareGraphCursors = [];
+const graphWindows = [{ start: 0, end: 120 }, { start: 0, end: 120 }];
 
 const RUN_DURATION = 120;
 const EARTHQUAKE_DURATION = P.earthquakeDuration;
@@ -39,18 +41,20 @@ function normalizeNumberInput(id, digits = 2) {
   el.value = fmt(inputNumber(id, Number(el.defaultValue) || 0), digits);
 }
 
-function setGraphRange(start, end) {
+function setGraphRange(start, end, comparison = false) {
   const runDuration = sim?.pulse?.runDuration || RUN_DURATION;
   const cleanStart = P.clamp(Number(start) || 0, 0, runDuration - 0.5);
-  const cleanEnd = P.clamp(Number(end) || 24, cleanStart + 0.5, runDuration);
-  $("graphStartInput").value = fmt(cleanStart, 2);
-  $("graphEndInput").value = fmt(cleanEnd, 2);
+  const cleanEnd = P.clamp(Number(end) || runDuration, cleanStart + 0.5, runDuration);
+  graphWindows[comparison ? 1 : 0] = { start: cleanStart, end: cleanEnd };
+  $(comparison ? "compareGraphStartInput" : "graphStartInput").value = fmt(cleanStart, 2);
+  $(comparison ? "compareGraphEndInput" : "graphEndInput").value = fmt(cleanEnd, 2);
 }
 
-function graphRange() {
+function graphRange(comparison = false) {
   const runDuration = sim?.pulse?.runDuration || RUN_DURATION;
-  const start = P.clamp(Number($("graphStartInput").value) || 0, 0, runDuration - 0.5);
-  const end = P.clamp(Number($("graphEndInput").value) || 24, start + 0.5, runDuration);
+  const window = graphWindows[comparison ? 1 : 0];
+  const start = P.clamp(window.start, 0, runDuration - 0.5);
+  const end = P.clamp(window.end, start + 0.5, runDuration);
   return { start, end };
 }
 
@@ -203,10 +207,13 @@ function stepLive(dt) {
 }
 
 function strutHeatColor(energy, scale) {
-  const u = P.clamp(energy / Math.max(1, scale), 0, 1);
-  const r = Math.round(109 + 132 * u);
-  const g = Math.round(127 - 54 * u);
-  const b = Math.round(139 - 104 * u);
+  // Spread the warming over more energy, with a gentle start and a muted red.
+  // This changes the visual cue only; simulated heat remains in joules.
+  const u = 1 - Math.exp(-Math.max(0, energy) / (8 * Math.max(1, scale)));
+  const warmth = u * u * (3 - 2 * u);
+  const r = Math.round(109 + 81 * warmth);
+  const g = Math.round(127 - 50 * warmth);
+  const b = Math.round(139 - 69 * warmth);
   return `rgb(${r},${g},${b})`;
 }
 
@@ -388,8 +395,10 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     const zoneBottom = bottom;
     ctx.save();
     ctx.fillStyle = "rgba(185, 65, 47, .085)";
-    ctx.fillRect(0, zoneTop, Math.max(0, leftLimit), zoneBottom - zoneTop);
-    ctx.fillRect(rightLimit, zoneTop, Math.max(0, w - rightLimit), zoneBottom - zoneTop);
+    const leftZoneEnd = P.clamp(leftLimit, 0, w);
+    const rightZoneStart = P.clamp(rightLimit, 0, w);
+    ctx.fillRect(0, zoneTop, leftZoneEnd, zoneBottom - zoneTop);
+    ctx.fillRect(rightZoneStart, zoneTop, w - rightZoneStart, zoneBottom - zoneTop);
     ctx.strokeStyle = "rgba(185, 65, 47, .72)";
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 7]);
@@ -404,13 +413,17 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     ctx.font = "bold 12px system-ui";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const labelY = top + 130;
-    const leftLabelX = Math.max(42, leftLimit / 2);
-    const rightLabelX = Math.min(w - 42, rightLimit + (w - rightLimit) / 2);
-    ctx.fillText("danger", leftLabelX, labelY - 7);
-    ctx.fillText("zone", leftLabelX, labelY + 7);
-    ctx.fillText("danger", rightLabelX, labelY - 7);
-    ctx.fillText("zone", rightLabelX, labelY + 7);
+    const labelY = (zoneTop + zoneBottom) / 2;
+    const textWidth = ctx.measureText("danger").width;
+    [[0, leftZoneEnd], [rightZoneStart, w]].forEach(([start, end]) => {
+      const size = Math.min(1, Math.max(0, end - start - 8) / textWidth);
+      // Hide a label when its visible band is too narrow to contain readable text.
+      if (size < 0.65) return;
+      ctx.font = `bold ${12 * size}px system-ui`;
+      const labelX = (start + end) / 2;
+      ctx.fillText("danger", labelX, labelY - 7 * size);
+      ctx.fillText("zone", labelX, labelY + 7 * size);
+    });
     ctx.restore();
   }
 
@@ -590,19 +603,30 @@ function drawStage(sample, run = sim, canvasId = "stage") {
   }
 }
 
-function drawGraph() {
-  const canvas = $("graph");
+function graphSwayScale() {
+  let maxY = 0.15;
+  [sim, compareSim].forEach((run, index) => {
+    if (!run) return;
+    const { start, end } = graphRange(index === 1);
+    run.samples.forEach(sample => {
+      if (sample.t >= start && sample.t <= end) maxY = Math.max(maxY, Math.abs(sample.sway));
+    });
+    if (run.pulse.dangerEnabled !== false) maxY = Math.max(maxY, (run.pulse.collapseSway ?? 0.5) * 1.15);
+  });
+  return maxY;
+}
+
+function drawGraph(run = sim, comparison = false, maxY = graphSwayScale()) {
+  const canvas = $(comparison ? "graphCompare" : "graph");
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
-  const traces = compareSim ? [
-    { run: compareSim, color: "#0f7b7e", dash: [] },
-    { run: sim, color: "#245e9b", dash: [8, 5] }
-  ] : [{ run: sim, color: "#0f7b7e", dash: [] }];
-  const plot = { left: 48, right: w - 18, top: 48, bottom: h - 44 };
+  const traces = [{ run, color: comparison || !compareSim ? "#0f7b7e" : "#245e9b", dash: [] }];
+  const plot = { left: 48, right: w - 18, top: 14, bottom: h - 36 };
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = "#f8fbfc";
   ctx.fillRect(0, 0, w, h);
+  ctx.font = "13px system-ui";
   ctx.strokeStyle = "#d2dde3";
   for (let i = 0; i < 5; i++) {
     const y = plot.top + i * (plot.bottom - plot.top) / 4;
@@ -611,13 +635,10 @@ function drawGraph() {
     ctx.lineTo(plot.right, y);
     ctx.stroke();
   }
-  const { start: tMin, end: tMax } = graphRange();
+  const { start: tMin, end: tMax } = graphRange(comparison);
   traces.forEach(trace => { trace.visible = trace.run.samples.filter(r => r.t >= tMin && r.t <= tMax); });
-  const danger = sim.pulse.collapseSway ?? 0.5;
-  const dangerEnabled = sim.pulse.dangerEnabled !== false;
-  let maxY = 0.15;
-  traces.forEach(trace => trace.visible.forEach(r => { maxY = Math.max(maxY, Math.abs(r.sway)); }));
-  if (dangerEnabled) maxY = Math.max(maxY, danger * 1.15);
+  const danger = run.pulse.collapseSway ?? 0.5;
+  const dangerEnabled = run.pulse.dangerEnabled !== false;
   const yFor = value => (plot.top + plot.bottom) / 2 - value / maxY * ((plot.bottom - plot.top) * 0.45);
   if (dangerEnabled) {
     const dangerTop = yFor(danger);
@@ -635,7 +656,11 @@ function drawGraph() {
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = "#b9412f";
-    ctx.fillText("danger zone", plot.right - 92, dangerTop - 6);
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("danger zone", (plot.left + plot.right) / 2, Math.max(plot.top + 7, (plot.top + dangerTop) / 2));
+    ctx.restore();
   }
   const xFor = t => plot.left + (t - tMin) / Math.max(0.5, tMax - tMin) * (plot.right - plot.left);
   traces.forEach(trace => {
@@ -659,14 +684,23 @@ function drawGraph() {
   });
   ctx.fillStyle = "#425160";
   ctx.font = "13px system-ui";
-  ctx.fillText("roof sway relative to foundation", plot.left, 18);
   ctx.fillText(`${fmt(maxY)} m`, 6, plot.top + 4);
   ctx.fillText(`-${fmt(maxY)} m`, 6, plot.bottom);
-  ctx.fillText(`${fmt(tMin, 2)} s`, plot.left, h - 16);
-  ctx.fillText(`${fmt(tMax, 2)} s`, plot.right - 62, h - 16);
+  ctx.save();
+  ctx.translate(14, (plot.top + plot.bottom) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center";
+  ctx.fillText("sway", 0, 0);
+  ctx.restore();
+  if (run.failed) {
+    ctx.fillStyle = "#b63030";
+    ctx.fillText(run.failureCause, plot.left + 6, plot.top + 16);
+  }
 
-  graphCursors = graphCursors.filter(t => t >= tMin && t <= tMax);
-  graphCursors.forEach((t, idx) => {
+  const cursors = (comparison ? compareGraphCursors : graphCursors).filter(t => t >= tMin && t <= tMax);
+  if (comparison) compareGraphCursors = cursors;
+  else graphCursors = cursors;
+  cursors.forEach((t, idx) => {
     const x = plot.left + (t - tMin) / Math.max(0.5, tMax - tMin) * (plot.right - plot.left);
     ctx.strokeStyle = idx === 0 ? "#b9412f" : "#c28b1c";
     ctx.lineWidth = 2;
@@ -677,13 +711,13 @@ function drawGraph() {
     ctx.fillStyle = ctx.strokeStyle;
     ctx.fillText(String(idx + 1), x + 4, plot.top + 16);
   });
-  if (graphCursors.length === 2) {
-    const dt = Math.abs(graphCursors[1] - graphCursors[0]);
+  if (cursors.length === 2) {
+    const dt = Math.abs(cursors[1] - cursors[0]);
     ctx.fillStyle = "#17212b";
-    ctx.fillText(`Δt = ${fmt(dt)} s`, plot.left, 36);
-  } else {
-    ctx.fillStyle = "#5f6f7f";
-    ctx.fillText("click graph to place time cursors", plot.left, 36);
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillText(`Δt = ${fmt(dt)} s`, (plot.left + plot.right) / 2, h - 12);
+    ctx.restore();
   }
 }
 
@@ -691,14 +725,11 @@ function syncCompareLayout() {
   const comparing = !!compareSim;
   $("labSimulation").classList.toggle("compare-mode", comparing);
   $("compareTower").hidden = !comparing;
-  $("compareLegend").hidden = !comparing;
-  $("primaryTowerHeading").textContent = comparing ? "Tower B" : "Tower";
-  $("tmdHeading").textContent = comparing ? "TMD · Tower B" : "TMD";
+  $("tmdHeading").textContent = comparing ? "Tower B" : "Tower";
   $("stage").setAttribute("aria-label", comparing ? "Tower B motion" : "Tower motion");
-  $("stage").height = comparing ? 740 : 760;
-  $("stageCompare").height = comparing ? 740 : 760;
-  $("graph").width = 560;
-  $("graph").height = comparing ? 880 : 620;
+  $("graph").setAttribute("aria-label", comparing ? "Tower B roof sway over time" : "Tower roof sway over time");
+  $("graphStartInput").setAttribute("aria-label", `${comparing ? "Tower B" : "Tower"} graph start time in seconds`);
+  $("graphEndInput").setAttribute("aria-label", `${comparing ? "Tower B" : "Tower"} graph end time in seconds`);
 }
 
 function renderRun(run, prefix, canvasId) {
@@ -707,15 +738,15 @@ function renderRun(run, prefix, canvasId) {
   sample.y = P.baseMotion(labTime, run.pulse).y;
   sample.sway = sample.x - sample.y;
   drawStage(sample, run, canvasId);
-  $(`${prefix}TmdState`).textContent = run.failureCause || (!run.damper.enabled ? "TMD off" : run.damper.damping >= 0.999 ? "TMD locked" : "TMD on");
-  $(`${prefix}Hits`).textContent = String(sample.hits);
-  $(`${prefix}HitIndicator`).classList.toggle("impact", run.hitFlash > 0);
+  $(`${prefix}Failure`).textContent = run.failureCause || "";
 }
 
 function renderLab() {
   renderRun(sim, "primary", "stage");
   if (compareSim) renderRun(compareSim, "compare", "stageCompare");
-  drawGraph();
+  const maxY = graphSwayScale();
+  drawGraph(sim, false, maxY);
+  if (compareSim) drawGraph(compareSim, true, maxY);
   $("earthquakeStatus").textContent = labRuns().every(run => run.failed) ? "Reset to try a new TMD design." : labTime === 0 ? "A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops." : labTime < sim.pulse.duration ? "Earthquake in progress: the ground is shaking." : "Ground stopped: measure the building's period now. Turn the TMD off to measure its natural period.";
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
   const dangerToggle = $("showDangerInput");
@@ -725,9 +756,11 @@ function renderLab() {
 
 function resetLab() {
   graphCursors = [];
+  compareGraphCursors = [];
   makeSim();
   syncCompareLayout();
   setGraphRange($("graphStartInput").value, $("graphEndInput").value);
+  setGraphRange($("compareGraphStartInput").value, $("compareGraphEndInput").value, true);
   renderLab();
 }
 
@@ -891,39 +924,42 @@ $("playBtn").addEventListener("click", () => {
 });
 $("pauseBtn").addEventListener("click", () => { sim.playing = false; labPaused = true; });
 $("resetBtn").addEventListener("click", () => resetLab());
-$("graph").addEventListener("click", event => {
-  if (!sim || labRuns().every(run => run.samples.length < 2)) return;
-  const rect = $("graph").getBoundingClientRect();
-  const x = (event.clientX - rect.left) / rect.width * $("graph").width;
-  const { start: tMin, end: tMax } = graphRange();
-  const left = 48;
-  const right = $("graph").width - 18;
-  const t = tMin + P.clamp((x - left) / (right - left), 0, 1) * Math.max(0.5, tMax - tMin);
-  if (graphCursors.length >= 2) graphCursors = [];
-  graphCursors.push(t);
-  renderLab();
-});
-$("graphStartInput").addEventListener("change", () => {
-  setGraphRange($("graphStartInput").value, $("graphEndInput").value);
-  graphCursors = [];
-  renderLab();
-});
-$("graphEndInput").addEventListener("change", () => {
-  setGraphRange($("graphStartInput").value, $("graphEndInput").value);
-  graphCursors = [];
-  renderLab();
-});
-$("graphLatestBtn").addEventListener("click", () => {
-  const width = graphRange().end - graphRange().start;
-  const end = Math.min(sim.pulse.runDuration, Math.max(width, labTime));
-  setGraphRange(end - width, end);
-  graphCursors = [];
-  renderLab();
-});
-$("graphFullBtn").addEventListener("click", () => {
-  setGraphRange(0, sim.pulse.runDuration);
-  graphCursors = [];
-  renderLab();
+[
+  { comparison: false, canvasId: "graph", prefix: "graph" },
+  { comparison: true, canvasId: "graphCompare", prefix: "compareGraph" }
+].forEach(({ comparison, canvasId, prefix }) => {
+  const clearCursors = () => {
+    if (comparison) compareGraphCursors = [];
+    else graphCursors = [];
+  };
+  $(canvasId).addEventListener("click", event => {
+    const run = comparison ? compareSim : sim;
+    if (!run || run.samples.length < 2) return;
+    const canvas = $(canvasId);
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width * canvas.width;
+    const { start: tMin, end: tMax } = graphRange(comparison);
+    const left = 48;
+    const right = canvas.width - 18;
+    const t = tMin + P.clamp((x - left) / (right - left), 0, 1) * Math.max(0.5, tMax - tMin);
+    let cursors = comparison ? compareGraphCursors : graphCursors;
+    if (cursors.length >= 2) { clearCursors(); cursors = comparison ? compareGraphCursors : graphCursors; }
+    cursors.push(t);
+    renderLab();
+  });
+  ["StartInput", "EndInput"].forEach(suffix => $(prefix + suffix).addEventListener("change", () => {
+    setGraphRange($(prefix + "StartInput").value, $(prefix + "EndInput").value, comparison);
+    clearCursors();
+    renderLab();
+  }));
+  ["StartInput", "EndInput"].forEach(suffix => {
+    const input = $(prefix + suffix);
+    input.addEventListener("focus", () => { input.dataset.previousValue = input.value; input.select(); });
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); input.blur(); }
+      if (event.key === "Escape") { input.value = input.dataset.previousValue; input.blur(); }
+    });
+  });
 });
 $("showDangerInput").addEventListener("change", () => renderLab());
 $("compareEnabled").addEventListener("change", () => {

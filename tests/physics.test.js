@@ -209,4 +209,16 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
     close(result.heat, 0, 1e-9, "the terminal hit is not counted as hydraulic heat");
   }
 }
+{
+  // Without a TMD, most of the sway should remain after five natural cycles.
+  // This verifies the intended slower background decay, rather than a constant.
+  const labTower = P.createLabTower(260, 11.3e6);
+  const free = P.simulate({
+    tower: labTower, damper: { enabled: false }, initialX: 0.2,
+    pulse: { amplitude: 0, dangerEnabled: false },
+    duration: 5 * labTower.period, sampleDt: 0.02
+  });
+  const retained = free.final.x / 0.2;
+  assert(retained > 0.82 && retained < 0.88, "no-TMD sway retains about 85 percent of its initial amplitude after five cycles");
+}
 console.log("physics tests passed");
