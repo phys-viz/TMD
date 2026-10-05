@@ -84,7 +84,7 @@
               </div>
               <canvas id="stageCompare" width="420" height="480" aria-label="Tower A motion"></canvas>
               <div class="graph-wrap">
-                <canvas id="graphCompare" width="560" height="170" aria-label="Tower A roof sway over time" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
+                <canvas id="graphCompare" width="560" height="170" aria-label="Tower A roof sway over time" aria-describedby="compareDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
                 <label class="axis-time axis-start" title="Edit graph start time">
                   <input id="compareGraphStartInput" aria-label="Tower A graph start time in seconds" type="number" min="0" max="120" step="0.01" value="0"><span aria-hidden="true">s</span>
                 </label>
@@ -92,6 +92,7 @@
                   <input id="compareGraphEndInput" aria-label="Tower A graph end time in seconds" type="number" min="1" max="120" step="0.01" value="120"><span aria-hidden="true">s</span>
                 </label>
                 <span id="compareFailure" class="sr-only" role="status"></span>
+                <span id="compareDangerTime" class="sr-only"></span>
               </div>
             </article>
             <article class="stage-wrap" aria-labelledby="tmdHeading">
@@ -108,7 +109,7 @@
               </div>
               <canvas id="stage" width="420" height="480" aria-label="Tower motion"></canvas>
               <div class="graph-wrap">
-                <canvas id="graph" width="560" height="170" aria-label="Tower roof sway over time" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
+                <canvas id="graph" width="560" height="170" aria-label="Tower roof sway over time" aria-describedby="primaryDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
                 <label class="axis-time axis-start" title="Edit graph start time">
                   <input id="graphStartInput" aria-label="Tower graph start time in seconds" type="number" min="0" max="120" step="0.01" value="0"><span aria-hidden="true">s</span>
                 </label>
@@ -116,6 +117,7 @@
                   <input id="graphEndInput" aria-label="Tower graph end time in seconds" type="number" min="1" max="120" step="0.01" value="120"><span aria-hidden="true">s</span>
                 </label>
                 <span id="primaryFailure" class="sr-only" role="status"></span>
+                <span id="primaryDangerTime" class="sr-only"></span>
               </div>
             </article>
           </div>
@@ -196,6 +198,6 @@
   </main>
 
   <script src="/physics.js?v=surface-contact-9"></script>
-  <script src="/app.js?v=surface-contact-15"></script>
+  <script src="/app.js?v=plot-danger-time-16"></script>
 </body>
 </html>

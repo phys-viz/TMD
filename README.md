@@ -39,12 +39,12 @@ npm.cmd test
 - A live message marks when ground shaking ends so students can measure the natural period with the TMD off.
 - After the pulse, the foundation stops and students observe free motion.
 - The building animation and graph are driven by the same numerical simulation state.
-- The graph shows roof sway relative to the foundation and supports two numbered time cursors. Edit the start and end time labels directly on its bottom axis, pressing Enter or clicking away to apply, or Escape to cancel. Both plots default to 0–120 seconds. The y-axis is labeled sway, the danger-zone label is centered, and plot headings and cursor instructions are omitted; cursor help remains on hover. Separate Graph start/end fields and Latest/Full buttons are removed.
+- The graph shows roof sway relative to the foundation and supports two numbered time cursors. Edit the start and end time labels directly on its bottom axis, pressing Enter or clicking away to apply, or Escape to cancel. Both plots default to 0–120 seconds. The y-axis is labeled sway horizontally, the danger-zone label is centered, and plot headings and cursor instructions are omitted; cursor help remains on hover. Separate Graph start/end fields and Latest/Full buttons are removed.
 - Difficulty modes:
   - Easy: no danger-zone collapse.
   - Medium: collapse at 3.00 s accumulated beyond the danger sway limit.
   - Hard: collapse at 2.50 s accumulated beyond the danger sway limit.
-- Danger time starts only after the pulse ends and failure occurs when the limit is reached. The lab uses an internal shared clock without elapsed-time or danger-time cards; graph times and classroom settling results use hundredths.
+- Danger time starts only after the pulse ends and failure occurs when the limit is reached. The lab uses an internal shared clock without elapsed-time or danger-time cards; graph times and classroom settling results use hundredths. A compact danger-time badge sits inside the upper-right corner of each plot on Medium/Hard, displaying completed hundredths against that mode's limit (for example, 1.23 / 2.50 s). Counters remain independent in Compare, disappear on Easy, and reset with the trial; they add no plot or tower height.
 - The danger-zone checkbox is disabled on Easy and enabled on Medium/Hard. Danger labels follow the center of their visible shaded bands, shrinking or hiding when a band is too narrow for readable text.
 - Danger time is based on visible roof sway, not hidden velocity/envelope values.
 - Each tower has a visible game sway threshold: round(0.20 * max(1, (6 / natural_period)^2), 2) m, displayed in the solo model notes and student challenge readout. This balances the shorter-period scenarios while retaining a common classroom earthquake; it is a classroom game rule, not a structural prediction.

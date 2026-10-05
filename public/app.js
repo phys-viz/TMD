@@ -634,6 +634,15 @@ function graphSwayScale() {
   return maxY;
 }
 
+function dangerTimeLabel(run) {
+  if (run.pulse.dangerEnabled === false) return "";
+  const limit = run.pulse.collapseTime ?? 3;
+  // Display completed hundredths, so a running trial cannot show the limit
+  // before its danger time actually reaches that limit.
+  const time = Math.floor((Math.min(Math.max(0, run.overLimitTime), limit) + 1e-9) * 100) / 100;
+  return `Danger time: ${fmt(time)} / ${fmt(limit)} s`;
+}
+
 function drawGraph(run = sim, comparison = false, maxY = graphSwayScale()) {
   const canvas = $(comparison ? "graphCompare" : "graph");
   const ctx = canvas.getContext("2d");
@@ -705,10 +714,9 @@ function drawGraph(run = sim, comparison = false, maxY = graphSwayScale()) {
   ctx.fillText(`${fmt(maxY)} m`, 6, plot.top + 4);
   ctx.fillText(`-${fmt(maxY)} m`, 6, plot.bottom);
   ctx.save();
-  ctx.translate(14, (plot.top + plot.bottom) / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = "center";
-  ctx.fillText("sway", 0, 0);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText("sway", 6, (plot.top + plot.bottom) / 2);
   ctx.restore();
   if (run.failed) {
     ctx.fillStyle = "#b63030";
@@ -737,6 +745,22 @@ function drawGraph(run = sim, comparison = false, maxY = graphSwayScale()) {
     ctx.fillText(`Δt = ${fmt(dt)} s`, (plot.left + plot.right) / 2, h - 12);
     ctx.restore();
   }
+  const dangerLabel = dangerTimeLabel(run);
+  if (dangerLabel) {
+    ctx.save();
+    ctx.font = "12px system-ui";
+    const labelWidth = ctx.measureText(dangerLabel).width;
+    const right = plot.right - 4;
+    ctx.fillStyle = "rgba(248, 251, 252, .94)";
+    ctx.beginPath();
+    ctx.roundRect(right - labelWidth - 10, plot.top + 4, labelWidth + 10, 20, 4);
+    ctx.fill();
+    ctx.fillStyle = P.dangerLimitReached(run.overLimitTime, run.pulse) ? "#b63030" : "#425160";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(dangerLabel, right - 5, plot.top + 14);
+    ctx.restore();
+  }
 }
 
 function syncCompareLayout() {
@@ -757,6 +781,7 @@ function renderRun(run, prefix, canvasId) {
   sample.sway = sample.x - sample.y;
   drawStage(sample, run, canvasId);
   $(`${prefix}Failure`).textContent = run.failureCause || "";
+  $(`${prefix}DangerTime`).textContent = dangerTimeLabel(run);
 }
 
 function renderLab() {

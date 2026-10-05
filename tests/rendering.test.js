@@ -40,7 +40,7 @@ function canvasRecorder() {
       if (key in target) return target[key];
       if (key === "createLinearGradient" || key === "createRadialGradient") return () => gradient;
       if (key === "measureText") return text => ({ width: String(text).length * 7 });
-      return (...args) => drawings.push({ method: key, args, width: target.lineWidth, color: target.strokeStyle, font: target.font });
+      return (...args) => drawings.push({ method: key, args, width: target.lineWidth, color: target.strokeStyle, fillColor: target.fillStyle, font: target.font });
     }
   });
   return ctx;
@@ -237,6 +237,7 @@ const swayLabel = id => dom[id].ctx.drawings.find(d => d.method === "fillText" &
 assert.strictEqual(swayLabel("graphCompare"), swayLabel("graph"), "separate graphs retain matching sway scales");
 for (const id of ["graph", "graphCompare"]) {
   assert(dom[id].ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "sway"), "each plot has a sway axis label");
+  assert(!dom[id].ctx.drawings.some(d => d.method === "rotate"), "sway labels are horizontal");
   assert(!dom[id].ctx.drawings.some(d => d.method === "fillText" && /roof sway|click graph/.test(d.args[0])), "crossed-out plot headings and instructions are removed");
 }
 
@@ -386,4 +387,32 @@ for (const damping of [0, 0.1]) for (const side of [-1, 1]) {
   assert(dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "FAILED"), "collapse animation follows the brief impact pose");
   assert(!dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "IMPACT"), "the impact marker clears after its brief hold");
 }
+const dangerLabels = id => dom[id].ctx.drawings.filter(d => d.method === "fillText" && d.args[0].startsWith("Danger time:"));
+for (const mode of ["medium", "hard", "easy"]) {
+  difficulty = mode;
+  vm.runInContext("resetLab(); sim.overLimitTime = 1.239; compareSim.overLimitTime = 0.567", app);
+  for (const id of ["graph", "graphCompare"]) dom[id].ctx.drawings.length = 0;
+  vm.runInContext("renderLab()", app);
+  if (mode === "easy") {
+    assert.strictEqual(dangerLabels("graph").length, 0, "Easy has no danger-time badge");
+    assert.strictEqual(dangerLabels("graphCompare").length, 0, "Easy hides both danger-time badges");
+    assert.strictEqual(dom.primaryDangerTime.textContent, "", "Easy clears the accessible danger-time readout");
+  } else {
+    const limit = mode === "hard" ? "2.50" : "3.00";
+    assert.strictEqual(dangerLabels("graph")[0].args[0], `Danger time: 1.23 / ${limit} s`, "the plot shows accumulated danger time and the mode's limit in hundredths");
+    assert.strictEqual(dangerLabels("graphCompare")[0].args[0], `Danger time: 0.56 / ${limit} s`, "each tower has an independent danger-time counter");
+    assert.strictEqual(dom.primaryDangerTime.textContent, dangerLabels("graph")[0].args[0], "accessible counter matches the plotted counter");
+    assert.strictEqual(dom.compareDangerTime.textContent, dangerLabels("graphCompare")[0].args[0], "Tower A's accessible counter matches its plot");
+  }
+}
+difficulty = "hard";
+vm.runInContext("resetLab(); sim.overLimitTime = 2.499; renderLab()", app);
+assert.strictEqual(dom.primaryDangerTime.textContent, "Danger time: 2.49 / 2.50 s", "the counter never rounds up to the limit before failure");
+dom.graph.ctx.drawings.length = 0;
+vm.runInContext("sim.overLimitTime = 2.5; renderLab()", app);
+assert.strictEqual(dom.primaryDangerTime.textContent, "Danger time: 2.50 / 2.50 s", "reaching the limit shows the complete danger allowance");
+assert.strictEqual(dangerLabels("graph")[0].fillColor, "#b63030", "the limit is highlighted when danger time reaches it");
+vm.runInContext("resetLab()", app);
+assert.strictEqual(dom.primaryDangerTime.textContent, "Danger time: 0.00 / 2.50 s", "Reset clears the counter");
+assert.strictEqual(dom.graph.height, 170, "inline readout adds no height to the plot");
 console.log("rendering tests passed");
