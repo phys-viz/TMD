@@ -47,6 +47,7 @@ async function post(path, body) {
     assert(started.quake.startedAt > Date.now(), "the intro finishes before the simulation clock begins");
     assert(started.results.some(r => r.result.status === 'standing'));
     assert(started.results.some(r => r.result.status === 'failed'));
+    assert(started.results.every(r => r.result.relativeSettleTime >= 3 && r.result.relativeSettleTime <= 20), "each tower gets a settle time relative to its own peak");
     const replay = await post(`/api/rooms/${room.code}/replay`);
     assert.deepEqual(replay.results, started.results);
     const blockedUnlock = await fetch(`${baseUrl}/api/rooms/${room.code}/unlock`, { method: 'POST' });

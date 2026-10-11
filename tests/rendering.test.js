@@ -689,5 +689,17 @@ for (const damping of [0, .25, 1]) {
   assert.equal(saved.has('tmd-teacher-OLDER2'), false, "deleted room disappears from saved rooms");
   assert.equal(saved.has('tmd-teacher-NEWER2'), true, "other saved rooms remain accessible");
   assert.equal(dom.deleteRoomBtn.disabled, true);
+
+  const entry = (nickname, status, damping, extra = {}) => ({ nickname, submission: damping == null ? { enabled: false } : { enabled: true, massRatio: 0.04, damping }, result: { status, failureTime: status === "failed" ? extra.failureTime : null, overLimitTime: 0, peakSway: 0.3, relativeSettleTime: 10, settleTime: 10 } });
+  const boardResults = [entry("Late fall", "failed", 0.1, { failureTime: 40 }), entry("Bare", "standing", null), entry("B", "standing", 0.2), entry("Early fall", "failed", 0, { failureTime: 5 }), entry("A", "standing", 0.2), entry("C", "standing", 0.5)];
+  const board = vm.runInContext("leaderboard", app)(boardResults, r => r.submission.damping, { needsTmd: true });
+  assert.deepEqual(Array.from(board, row => row.r.nickname), ["B", "A", "C", "Bare", "Late fall", "Early fall"], "survivors rank by value, then no-TMD survivors, then failures by how long they lasted");
+  assert.deepEqual(Array.from(board, row => row.place), [1, 1, 3, 4, 5, 6], "tied values share a place");
+  assert.equal(board.find(row => row.r.nickname === "Early fall").kind, "failed", "the lowest damping cannot win if the tower collapsed");
+  vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: true });
+  assert(dom.survivorBanner.innerHTML.includes("4 of 6 towers survived") && dom.survivorBanner.innerHTML.includes("Late fall"), "banner counts survivors and names collapses");
+  assert(dom.leaderboards.innerHTML.includes("Least time in danger zone") && dom.leaderboards.innerHTML.includes("Collapsed at 40.0 s"));
+  vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: false });
+  assert(dom.leaderboards.innerHTML.includes("Least peak sway"), "Easy rooms rank peak sway instead of danger time");
   console.log("rendering tests passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });

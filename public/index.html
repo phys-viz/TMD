@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-28">
+  <link rel="stylesheet" href="/styles.css?v=classroom-29">
 </head>
 <body>
   <header class="topbar">
@@ -224,7 +224,7 @@
           <h2>City Challenge</h2>
           <p id="cityCaption">Create or join a room to see the shared skyline.</p>
         </div>
-        <div class="button-row"><button id="quakeSoundBtn" type="button" aria-pressed="true" aria-label="Earthquake warning sound">Sound on</button><div id="quakeBadge" class="badge">Waiting</div></div>
+        <div class="button-row"><button id="skipResultsBtn" type="button" hidden>Skip to results</button><button id="quakeSoundBtn" type="button" aria-pressed="true" aria-label="Earthquake warning sound">Sound on</button><div id="quakeBadge" class="badge">Waiting</div></div>
       </div>
       <div id="quakeIntro" class="quake-intro" hidden aria-labelledby="quakeAlertTitle">
         <div class="quake-alert-sign"><span aria-hidden="true">?</span><div><h2 id="quakeAlertTitle">EARTHQUAKE ALERT!</h2><p>Morristown, New Jersey is making waves.</p></div></div>
@@ -252,6 +252,8 @@
       </div>
       <canvas id="cityCanvas" width="1100" height="480"></canvas>
       <div id="cityResults" class="panel">
+        <div id="survivorBanner" class="survivor-banner"></div>
+        <div id="leaderboards" class="leaderboards"></div>
         <h2>Results</h2>
         <table id="resultsTable"><thead><tr><th>Rank</th><th>Name</th><th>Status</th><th>Settling</th><th>Peak sway</th><th>Wall hits</th><th>Thermal energy</th><th>Design</th></tr></thead><tbody></tbody></table>
       </div>
@@ -259,6 +261,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-35"></script>
+  <script src="/app.js?v=classroom-36"></script>
 </body>
 </html>

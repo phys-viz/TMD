@@ -696,3 +696,23 @@ th { color: #425160; }
 .blocked-names ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
 .blocked-names li { display: flex; justify-content: space-between; gap: 16px; font-size: .95rem; color: #314b59; }
 .blocked-names time { color: #8193a0; font-variant-numeric: tabular-nums; }
+
+/* City leaderboards: survivor banner plus four ranked boards. */
+.survivor-banner { display: grid; gap: 4px; margin-bottom: 16px; padding: 14px 18px; border-radius: 10px; background: #e1f1e8; color: #1f5a3c; }
+.survivor-banner strong { font-size: 1.5rem; }
+.survivor-banner span { color: #5b6b75; }
+.survivor-banner:empty { display: none; }
+.leaderboards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.leaderboards:empty { display: none; }
+.leaderboard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fbfcfd; }
+.leaderboard h3 { font-size: 1rem; text-transform: none; letter-spacing: 0; color: #203c49; }
+.leaderboard > p { margin: 2px 0 8px; font-size: .82rem; }
+.leaderboard ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.leaderboard li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: .95rem; }
+.leaderboard li.podium { background: #fff6dd; font-weight: 700; }
+.board-place { text-align: center; color: #65727c; font-variant-numeric: tabular-nums; }
+.board-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-value { font-variant-numeric: tabular-nums; color: #314b59; }
+.board-no-tmd, .board-failed { color: #8193a0; }
+.board-failed .board-value { color: var(--bad); font-size: .85rem; }
+#skipResultsBtn { background: #f0f4f6; color: #3b5362; border: 1px solid #c6d3db; box-shadow: none; }

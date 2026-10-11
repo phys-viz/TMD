@@ -452,6 +452,12 @@
     const baseline = simulate({ tower, damper: { enabled: false }, pulse: p, duration, sampleDt: 0.05 });
     const designed = simulate({ tower, damper, pulse: p, duration, sampleDt: 0.05, stopOnHit: true, stopOnFailure: true });
     const improvement = baseline.settleTime > 0 ? 100 * (baseline.settleTime - designed.settleTime) / baseline.settleTime : 0;
+    // Leaderboard settling: last time after the quake that sway exceeded 10% of this tower's own peak,
+    // so towers that naturally sway more are not penalized.
+    let relativeSettleTime = p.duration;
+    for (const sample of designed.samples) {
+      if (sample.t > p.duration && Math.abs(sample.sway) > 0.1 * designed.peakSway) relativeSettleTime = sample.t;
+    }
     const limit = p.driftLimit || 1.2;
     const dangerEnabled = p.dangerEnabled !== false;
     const collapseSway = p.collapseSway ?? 0.5;
@@ -462,6 +468,7 @@
       peakSway: designed.peakSway,
       baselineSettleTime: baseline.settleTime,
       settleTime: designed.settleTime,
+      relativeSettleTime,
       improvement,
       status,
       failureTime: status === "failed" ? (designed.failureTime ?? designed.final.t) : null,

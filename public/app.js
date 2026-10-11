@@ -1098,6 +1098,7 @@ function renderCity() {
   $("quakeIntro").hidden = !intro;
   canvas.hidden = intro;
   $("cityResults").hidden = running && (intro || t < (pulse.runDuration || RUN_DURATION) + 3.6);
+  $("skipResultsBtn").hidden = !running || intro || t >= (pulse.runDuration || RUN_DURATION) + 3.6;
   if (intro) {
     playQuakeWarning(pulse.startedAt);
     $("quakeCountdown").textContent = `Brace your buildings — skyline in ${Math.ceil(remaining)}!`;
@@ -1146,7 +1147,53 @@ function renderCity() {
     ctx.fillText(s.nickname, cx, h - 14, Math.max(1, cell - 8));
   });
 
+  renderLeaderboards(currentRoom.results || [], pulse);
   $("resultsTable").querySelector("tbody").innerHTML = (currentRoom.results || []).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.nickname)}</td><td>${r.result.status}</td><td>${fmt(r.result.settleTime, 2)} s</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>${r.submission?.enabled ? `L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}` : "No TMD"}</td></tr>`).join("");
+}
+
+// Each board ranks surviving towers by one measure; collapsed towers follow, longest-lasting first.
+// Tied values share a place.
+function leaderboard(results, value, { needsTmd = false } = {}) {
+  const survivors = results.filter(r => r.result.status !== "failed");
+  const ranked = survivors.filter(r => !needsTmd || r.submission?.enabled).sort((a, b) => value(a) - value(b));
+  const noTmd = needsTmd ? survivors.filter(r => !r.submission?.enabled) : [];
+  const failed = results.filter(r => r.result.status === "failed").sort((a, b) => (b.result.failureTime ?? 0) - (a.result.failureTime ?? 0));
+  const rows = [];
+  ranked.forEach((r, i) => {
+    const place = i > 0 && value(r) === value(ranked[i - 1]) ? rows[i - 1].place : i + 1;
+    rows.push({ r, place, kind: "ranked" });
+  });
+  for (const r of noTmd) rows.push({ r, place: rows.length + 1, kind: "no-tmd" });
+  for (const r of failed) rows.push({ r, place: rows.length + 1, kind: "failed" });
+  return rows;
+}
+
+function renderLeaderboards(results, pulse) {
+  if (!results.length) {
+    $("survivorBanner").innerHTML = "";
+    $("leaderboards").innerHTML = "";
+    return;
+  }
+  const survivors = results.filter(r => r.result.status !== "failed");
+  const fallen = results.filter(r => r.result.status === "failed");
+  $("survivorBanner").innerHTML = `<strong>🏙️ ${survivors.length} of ${results.length} towers survived!</strong>${fallen.length ? `<span>Collapsed: ${fallen.map(r => escapeHtml(r.nickname)).join(", ")}</span>` : ""}`;
+  const dangerOn = pulse?.dangerEnabled !== false;
+  // Values are rounded to what is displayed so visible ties share a place.
+  const round = (v, digits) => Number(v.toFixed(digits));
+  const boards = [
+    { title: "Fastest to settle", note: "Sway within 10% of its own peak", value: r => round(r.result.relativeSettleTime ?? r.result.settleTime, 2), show: v => `${fmt(v, 2)} s` },
+    dangerOn
+      ? { title: "Least time in danger zone", note: "Must survive", value: r => round(r.result.overLimitTime || 0, 2), show: v => `${fmt(v, 2)} s` }
+      : { title: "Least peak sway", note: "No danger zone on Easy", value: r => round(r.result.peakSway, 2), show: v => `${fmt(v, 2)} m` },
+    { title: "Lightest TMD", note: "Mass as % of tower, must survive", value: r => round(r.submission.massRatio * 100, 1), show: v => `${fmt(v, 1)}%`, needsTmd: true },
+    { title: "Least damping", note: "Must survive", value: r => round(r.submission.damping, 2), show: v => fmt(v, 2), needsTmd: true }
+  ];
+  const medals = ["🥇", "🥈", "🥉"];
+  $("leaderboards").innerHTML = boards.map(board => `<section class="leaderboard"><h3>${board.title}</h3><p>${board.note}</p><ol>${leaderboard(results, board.value, board).map(({ r, place, kind }) => {
+    const label = kind === "failed" ? `Collapsed at ${fmt(r.result.failureTime ?? 0, 1)} s` : kind === "no-tmd" ? "No TMD" : board.show(board.value(r));
+    const mark = kind === "ranked" && place <= 3 ? medals[place - 1] : place;
+    return `<li class="board-${kind}${kind === "ranked" && place <= 3 ? " podium" : ""}"><span class="board-place">${mark}</span><span class="board-name">${escapeHtml(r.nickname)}</span><span class="board-value">${label}</span></li>`;
+  }).join("")}</ol></section>`).join("");
 }
 
 function animateCity() {
@@ -1472,6 +1519,12 @@ async function runQuake(action) {
   renderCity();
 }
 $("startBtn").addEventListener("click", () => runQuake("start"));
+// Scores are computed when the quake starts, so skipping only fast-forwards the animation.
+$("skipResultsBtn").addEventListener("click", () => {
+  if (!currentRoom?.quake || currentRoom.phase !== "running") return;
+  cityStart = performance.now() - ((currentRoom.quake.runDuration || RUN_DURATION) + 3.6) * 1000;
+  renderCity();
+});
 $("replayBtn").addEventListener("click", () => runQuake("replay"));
 
 $("quakeSoundBtn").addEventListener("click", () => {
