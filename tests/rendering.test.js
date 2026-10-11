@@ -415,4 +415,85 @@ assert.strictEqual(dangerLabels("graph")[0].fillColor, "#b63030", "the limit is 
 vm.runInContext("resetLab()", app);
 assert.strictEqual(dom.primaryDangerTime.textContent, "Danger time: 0.00 / 2.50 s", "Reset clears the counter");
 assert.strictEqual(dom.graph.height, 170, "inline readout adds no height to the plot");
+// The city uses the student tower renderer for every pair, including TMD hardware.
+dom.cityCanvas.ctx = canvasRecorder();
+dom.cityCanvas.getContext = () => dom.cityCanvas.ctx;
+dom.resultsTable.querySelector = () => ({ innerHTML: "" });
+vm.runInContext(`currentRoom = {
+  code: "DEMO", phase: "design", config: {}, quake: null, results: [],
+  students: Array.from({ length: 12 }, (_, i) => ({
+    nickname: "Pair " + (i + 1), tower: P.generateTower("city-render", i),
+    submission: { ...P.defaultDamperFor(P.generateTower("city-render", i)), damping: 0.45 }
+  }))
+}; renderCity()`, app);
+const cityDrawings = dom.cityCanvas.ctx.drawings;
+assert.equal(cityDrawings.filter(d => d.method === "roundRect" && d.fillColor === "#0f7b7e").length, 12, "each city tower has the student tower's teal roof");
+assert.equal(cityDrawings.filter(d => d.method === "stroke" && d.width === 8).length, 24, "each pair has both hydraulic housings");
+assert.equal(cityDrawings.filter(d => d.method === "fillText" && String(d.args[0]).startsWith("Pair ")).length, 12, "all pairs keep readable skyline labels");
+assert.equal(cityDrawings.filter(d => d.method === "fillRect" && d.args[2] === 420).length, 0, "individual towers do not paint over their neighbors");
+// The original buckle remains, followed by a ground-level rubble ending.
+function collapseDrawing(age) {
+  dom.stage.ctx.drawings.length = 0;
+  vm.runInContext(`drawStage(P.sampleState(sim.state, sim.tower, sim.damper, sim.pulse), { ...sim, failed: true, state: {}, collapseAge: ${age} })`, app);
+  return [...dom.stage.ctx.drawings];
+}
+const buckleDrawing = collapseDrawing(2.2);
+const rubbleDrawing = collapseDrawing(3.6);
+const columnTips = drawings => drawings.filter(d => d.method === "quadraticCurveTo").map(d => d.args[3]);
+assert(columnTips(buckleDrawing).every(y => y < dom.stage.height - 100), "the original crash still leaves a buckled structure before pulverizing");
+assert.equal(columnTips(rubbleDrawing).length, 0, "the completed collapse draws no remaining columns");
+assert.equal(rubbleDrawing.filter(d => d.method === "fillRect").length - buckleDrawing.filter(d => d.method === "fillRect").length, 47, "the ending replaces the nine flying beams with 56 settled rubble fragments");
+const failureTitle = rubbleDrawing.find(d => d.method === "fillText" && d.args[0] === "FAILED");
+assert.deepEqual(failureTitle.args, ["FAILED", dom.stage.width / 2, dom.stage.height / 2], "failure title is centered in the tower view");
+assert.equal(failureTitle.font, "bold 52px system-ui", "failure title is large enough to stand out");
+// Intro, ground shaking, settling, and aftermath follow a single shared clock.
+const sequenceStart = clock;
+app.quakeScheduledAt = Date.now() + 10000;
+vm.runInContext(`currentRoom.phase = "running"; currentRoom.quake = { startedAt: quakeScheduledAt, duration: 3, runDuration: 20, difficulty: "medium", amplitude: .62 }; renderCity()`, app);
+assert.equal(dom.quakeIntro.hidden, false, "scheduled quake begins with the Morristown alert");
+assert.equal(dom.cityCanvas.hidden, true, "skyline waits until the alert ends");
+assert.equal(dom.cityResults.hidden, true, "final results stay hidden during the alert");
+clock = sequenceStart + 10100;
+vm.runInContext("renderCity()", app);
+assert.equal(dom.quakeIntro.hidden, true, "alert closes after its hold");
+assert.equal(dom.cityCanvas.hidden, false, "skyline is revealed from the start of shaking");
+assert.equal(dom.quakeBadge.textContent, "Ground shaking!");
+clock = sequenceStart + 13500;
+vm.runInContext("renderCity()", app);
+assert.equal(dom.quakeBadge.textContent, "Ground stopped ? settling");
+clock = sequenceStart + 34500;
+vm.runInContext("renderCity()", app);
+assert.equal(dom.quakeBadge.textContent, "Aftermath");
+assert.equal(dom.cityResults.hidden, false, "aftermath reveals the final results");
+// Even a failure at the very end receives its full collapse before aftermath.
+vm.runInContext(`currentRoom.students = [ { ...currentRoom.students[0], result: { status: "failed", failureTime: 20, samples: [{ t: 20, y: 0, sway: 0, theta: 0, heat: 0 }] } } ]`, app);
+dom.cityCanvas.ctx.drawings.length = 0;
+vm.runInContext("renderCity()", app);
+assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "fillRect" && ["#723a37", "#c4d4da", "#9d7970", "#0f7b7e"].includes(d.fillColor)).length, 56, "late failures finish with all rubble fragments before the clock stops");
+dom.cityCanvas.ctx.drawings.length = 0;
+vm.runInContext("currentRoom.students[0].result.failureTime = 21; renderCity()", app);
+assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "quadraticCurveTo").length, 0, "aftermath explicitly removes all failed structures even with late failure timestamps");
+assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "fillRect" && ["#723a37", "#c4d4da", "#9d7970", "#0f7b7e"].includes(d.fillColor)).length, 56, "aftermath always contains the complete rubble pile");
+// Warning audio plays once per map intro; mute stops it and replay can sound again.
+const warningOscillators = [];
+const audioParam = () => ({ setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
+app.window.AudioContext = class {
+  constructor() { this.state = "running"; this.currentTime = 0; this.destination = {}; }
+  createOscillator() {
+    const node = { frequency: audioParam(), connect() {}, disconnect() {}, starts: [], stops: [], start(t) { this.starts.push(t); }, stop(t) { this.stops.push(t); } };
+    warningOscillators.push(node);
+    return node;
+  }
+  createGain() { return { gain: audioParam(), connect() {}, disconnect() {} }; }
+};
+vm.runInContext("prepareQuakeAudio(); playQuakeWarning(100); playQuakeWarning(100)", app);
+assert.equal(warningOscillators.length, 3, "repeated frames do not repeat the three siren calls");
+dom.quakeSoundBtn.dispatch("click");
+assert.equal(dom.quakeSoundBtn.textContent, "Sound off");
+assert(warningOscillators.every(node => node.stops.includes(undefined)), "mute immediately stops scheduled siren calls");
+vm.runInContext("playQuakeWarning(200)", app);
+assert.equal(warningOscillators.length, 3, "muted intros remain silent");
+dom.quakeSoundBtn.dispatch("click");
+vm.runInContext("playQuakeWarning(200)", app);
+assert.equal(warningOscillators.length, 6, "a new intro can sound after unmuting");
 console.log("rendering tests passed");

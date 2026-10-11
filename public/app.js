@@ -13,6 +13,51 @@ let currentStudent = null;
 let events = null;
 let cityStart = 0;
 let lastCityStartedAt = 0;
+let quakeAudio = null;
+let quakeSoundEnabled = true;
+let lastQuakeSoundAt = 0;
+let quakeSoundNodes = [];
+
+function prepareQuakeAudio() {
+  if (!quakeSoundEnabled) return;
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    if (!quakeAudio) quakeAudio = new AudioContext();
+    if (quakeAudio.state === "suspended") quakeAudio.resume().catch(() => {});
+  } catch (_) { /* Audio support does not affect the earthquake sequence. */ }
+}
+
+function stopQuakeSound() {
+  quakeSoundNodes.forEach(node => { try { node.stop(); } catch (_) {} });
+  quakeSoundNodes = [];
+}
+
+function playQuakeWarning(startedAt) {
+  if (!quakeSoundEnabled || !quakeAudio || quakeAudio.state !== "running" || lastQuakeSoundAt === startedAt) return;
+  lastQuakeSoundAt = startedAt;
+  stopQuakeSound();
+  // Three soft rising/falling siren calls, synthesized locally without audio files.
+  for (let i = 0; i < 3; i++) {
+    const start = quakeAudio.currentTime + i * 0.7;
+    const oscillator = quakeAudio.createOscillator();
+    const gain = quakeAudio.createGain();
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(440, start);
+    oscillator.frequency.exponentialRampToValueAtTime(880, start + 0.25);
+    oscillator.frequency.exponentialRampToValueAtTime(440, start + 0.55);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.12, start + 0.04);
+    gain.gain.setValueAtTime(0.12, start + 0.45);
+    gain.gain.linearRampToValueAtTime(0, start + 0.6);
+    oscillator.connect(gain);
+    gain.connect(quakeAudio.destination);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    oscillator.start(start);
+    oscillator.stop(start + 0.61);
+    quakeSoundNodes.push(oscillator);
+  }
+}
 let graphCursors = [];
 let compareGraphCursors = [];
 const graphWindows = [{ start: 0, end: 120 }, { start: 0, end: 120 }];
@@ -347,8 +392,8 @@ function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, fa
   ctx.lineCap = "butt";
 }
 
-function drawStage(sample, run = sim, canvasId = "stage") {
-  const canvas = $(canvasId);
+function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
+  const canvas = typeof canvasId === "string" ? $(canvasId) : canvasId;
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
@@ -366,22 +411,25 @@ function drawStage(sample, run = sim, canvasId = "stage") {
   const towerWidth = 216;
   const d = run.damper;
 
-  const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, "#e8f2f5");
-  sky.addColorStop(0.58, "#f8fbfc");
-  sky.addColorStop(1, "#f2f7f8");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "#dfe9ee";
-  ctx.fillRect(0, h - 54, w, 54);
-  ctx.fillStyle = "#cbdbe2";
-  ctx.fillRect(0, h - 54, w, 5);
-  ctx.strokeStyle = "#8aa1ad";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, h - 54);
-  ctx.lineTo(w, h - 54);
-  ctx.stroke();
+  if (options.background !== false) {
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, "#e8f2f5");
+    sky.addColorStop(0.58, "#f8fbfc");
+    sky.addColorStop(1, "#f2f7f8");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#dfe9ee";
+    ctx.fillRect(0, h - 54, w, 54);
+    ctx.fillStyle = "#cbdbe2";
+    ctx.fillRect(0, h - 54, w, 5);
+    ctx.strokeStyle = "#8aa1ad";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, h - 54);
+    ctx.lineTo(w, h - 54);
+    ctx.stroke();
+
+  }
 
   ctx.fillStyle = "rgba(42, 68, 82, .10)";
   ctx.beginPath();
@@ -392,7 +440,7 @@ function drawStage(sample, run = sim, canvasId = "stage") {
   ctx.fill();
 
   const dangerEnabled = run.pulse.dangerEnabled !== false;
-  if (!run.failed && dangerEnabled && $("showDangerInput").checked) {
+  if (options.danger !== false && !run.failed && dangerEnabled && $("showDangerInput").checked) {
     const dangerPx = (run.pulse.collapseSway ?? DANGER_SWAY) * scale;
     const leftLimit = baseX - towerWidth / 2 - dangerPx;
     const rightLimit = baseX + towerWidth / 2 + dangerPx;
@@ -445,7 +493,11 @@ function drawStage(sample, run = sim, canvasId = "stage") {
       ctx.fillStyle = `rgba(185, 65, 47, ${0.10 * impact})`;
       ctx.fillRect(-10, -10, w + 20, h + 20);
     }
-    const collapsedTop = top + (bottom - top) * (0.52 * p);
+    // Keep the original crash, then crush the remaining structure to the ground.
+    const crushProgress = run.collapseAge >= 3.6 - 1e-9 ? 1 : P.clamp((run.collapseAge - 2.2) / 1.4, 0, 1);
+    const crush = crushProgress * crushProgress * (3 - 2 * crushProgress);
+    const buckledTop = top + (bottom - top) * (0.52 * p);
+    const collapsedTop = buckledTop + (bottom - 8 - buckledTop) * crush;
     const lean = 70 * p;
     const buckle = 24 * Math.sin(p * Math.PI);
     const leftBase = baseX - towerWidth / 2;
@@ -453,72 +505,92 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     const leftTop = roofX - towerWidth / 2 + lean - buckle;
     const rightTop = roofX + towerWidth / 2 + lean + buckle * 0.4;
 
-    const crumple = ctx.createLinearGradient(leftTop, 0, rightTop, 0);
-    crumple.addColorStop(0, "#e8d3cd");
-    crumple.addColorStop(0.55, "#f8ebe7");
-    crumple.addColorStop(1, "#dcc1ba");
-    ctx.save();
-    ctx.shadowColor = "rgba(20, 33, 42, .18)";
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 8;
-    ctx.fillStyle = crumple;
-    ctx.beginPath();
-    ctx.moveTo(leftBase, bottom);
-    ctx.lineTo(rightBase, bottom);
-    ctx.lineTo(rightTop, collapsedTop);
-    ctx.lineTo(leftTop, collapsedTop + 18 * p);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    ctx.strokeStyle = "#723a37";
-    ctx.lineWidth = columnWidth;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(leftBase, bottom);
-    ctx.quadraticCurveTo(leftBase - 18 * p, (bottom + collapsedTop) / 2, leftTop, collapsedTop + 18 * p);
-    ctx.moveTo(rightBase, bottom);
-    ctx.quadraticCurveTo(rightBase + 14 * p, (bottom + collapsedTop) / 2, rightTop, collapsedTop);
-    ctx.stroke();
-
-    ctx.strokeStyle = "rgba(114, 58, 55, .35)";
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 4; i++) {
-      const y = bottom - (bottom - collapsedTop) * (i + 1) / 5;
-      ctx.beginPath();
-      ctx.moveTo(leftBase + 26 + i * 8, y + Math.sin(i + p * 4) * 8);
-      ctx.lineTo(rightBase - 26 + i * 4, y - 10 + Math.cos(i + p * 3) * 8);
-      ctx.stroke();
-    }
-    ctx.lineCap = "butt";
-
-    ctx.fillStyle = "#8b3e3e";
-    ctx.save();
-    ctx.translate((leftTop + rightTop) / 2, collapsedTop - 11);
-    ctx.rotate(0.09 + 0.18 * p);
-    ctx.roundRect(-towerWidth / 2 - 10, -9, towerWidth + 20, 18, 3);
-    ctx.fill();
-    ctx.restore();
-
-    ctx.fillStyle = "rgba(114, 58, 55, .65)";
-    for (let i = 0; i < 9; i++) {
-      const t = P.clamp((p * 1.25) - i * 0.045, 0, 1);
-      const sx = baseX - 95 + i * 24 + Math.sin(i * 1.9) * 14;
-      const sy = collapsedTop + 10 + t * (bottom - collapsedTop - 18) + Math.sin(t * Math.PI) * 18;
+    if (crushProgress < 1) {
+      const crumple = ctx.createLinearGradient(leftTop, 0, rightTop, 0);
+      crumple.addColorStop(0, "#e8d3cd");
+      crumple.addColorStop(0.55, "#f8ebe7");
+      crumple.addColorStop(1, "#dcc1ba");
       ctx.save();
-      ctx.translate(sx, sy);
-      ctx.rotate(-0.8 + i * 0.27 + t * 1.2);
-      ctx.fillRect(-10, -2, 20 + (i % 3) * 6, 4);
+      ctx.shadowColor = "rgba(20, 33, 42, .18)";
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 8;
+      ctx.fillStyle = crumple;
+      ctx.beginPath();
+      ctx.moveTo(leftBase, bottom);
+      ctx.lineTo(rightBase, bottom);
+      ctx.lineTo(rightTop, collapsedTop);
+      ctx.lineTo(leftTop, collapsedTop + 18 * p * (1 - crush));
+      ctx.closePath();
+      ctx.fill();
       ctx.restore();
+
+      ctx.strokeStyle = "#723a37";
+      ctx.lineWidth = columnWidth;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(leftBase, bottom);
+      ctx.quadraticCurveTo(leftBase - 18 * p, (bottom + collapsedTop) / 2, leftTop, collapsedTop + 18 * p * (1 - crush));
+      ctx.moveTo(rightBase, bottom);
+      ctx.quadraticCurveTo(rightBase + 14 * p, (bottom + collapsedTop) / 2, rightTop, collapsedTop);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(114, 58, 55, .35)";
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 4; i++) {
+        const y = bottom - (bottom - collapsedTop) * (i + 1) / 5;
+        ctx.beginPath();
+        ctx.moveTo(leftBase + 26 + i * 8, y + Math.sin(i + p * 4) * 8);
+        ctx.lineTo(rightBase - 26 + i * 4, y - 10 + Math.cos(i + p * 3) * 8);
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+
+      ctx.fillStyle = "#8b3e3e";
+      ctx.save();
+      ctx.translate((leftTop + rightTop) / 2, collapsedTop - 11);
+      ctx.rotate(0.09 + 0.18 * p);
+      ctx.globalAlpha = 1 - crush;
+      ctx.roundRect(-towerWidth / 2 - 10, -9, towerWidth + 20, 18, 3);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = "rgba(114, 58, 55, .65)";
+      for (let i = 0; i < 9; i++) {
+        const t = P.clamp((p * 1.25) - i * 0.045, 0, 1);
+        const sx = baseX - 95 + i * 24 + Math.sin(i * 1.9) * 14;
+        const sy = collapsedTop + 10 + t * (bottom - collapsedTop - 18) + Math.sin(t * Math.PI) * 18;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(-0.8 + i * 0.27 + t * 1.2);
+        ctx.fillRect(-10, -2, 20 + (i % 3) * 6, 4);
+        ctx.restore();
+      }
+
     }
 
-    ctx.fillStyle = `rgba(118, 95, 84, ${0.30 * (1 - p * 0.22)})`;
+    if (crushProgress > 0) {
+      // Deterministic fragments settle into a low pile; replay uses the same debris.
+      for (let i = 0; i < 56; i++) {
+        const spread = (i / 55 - 0.5) * 320;
+        const arc = Math.sin(crushProgress * Math.PI) * (12 + (i % 5) * 9);
+        const pileHeight = (1 - Math.abs(spread) / 175) * (8 + i % 6 * 4);
+        ctx.save();
+        ctx.translate(baseX + spread * (0.65 + 0.35 * crush), bottom - pileHeight * crush - arc);
+        ctx.rotate(i * 1.7 + crush * (i % 3 - 1));
+        ctx.fillStyle = ["#723a37", "#c4d4da", "#9d7970", "#0f7b7e"][i % 4];
+        ctx.fillRect(-6 - i % 4, -4, 12 + i % 9, 6 + i % 5);
+        ctx.restore();
+      }
+    }
+
+    const dustBurst = Math.sin(crushProgress * Math.PI);
+    ctx.fillStyle = `rgba(118, 95, 84, ${0.30 * (1 - p * 0.22) * (1 - crush) + 0.28 * dustBurst})`;
     for (let i = 0; i < 13; i++) {
-      const spread = 1 + p * 0.9;
+      const spread = 1 + p * 0.9 + dustBurst * 0.3;
       const px = baseX - 145 * spread + i * 24 * spread + Math.sin(i * 2.1) * 15;
       const py = bottom + 3 - Math.sin(p * Math.PI) * (12 + i % 3 * 7);
       ctx.beginPath();
-      ctx.arc(px, py, 9 + (i % 4) * 5 + p * 18, 0, Math.PI * 2);
+      ctx.arc(px, py, 9 + (i % 4) * 5 + p * 18 + dustBurst * 16, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -529,8 +601,13 @@ function drawStage(sample, run = sim, canvasId = "stage") {
     ctx.stroke();
 
     ctx.fillStyle = "#723a37";
-    ctx.font = "bold 20px system-ui";
-    ctx.fillText("FAILED", 22, 36);
+    ctx.font = "bold 52px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.strokeStyle = "rgba(248, 251, 252, .95)";
+    ctx.lineWidth = 7;
+    ctx.strokeText("FAILED", w / 2, h / 2);
+    ctx.fillText("FAILED", w / 2, h / 2);
     ctx.restore();
     return;
   }
@@ -813,7 +890,7 @@ function animateLab(now) {
   const elapsed = Math.max(0, Math.min(0.06, (now - sim.lastClock) / 1000));
   sim.lastClock = now;
   if (!labPaused) labRuns().forEach(run => {
-    if (run.failed) run.collapseAge = Math.min(2.2, run.collapseAge + elapsed);
+    if (run.failed) run.collapseAge = Math.min(3.6, run.collapseAge + elapsed);
     run.hitFlash = Math.max(0, run.hitFlash - elapsed);
   });
   if (sim.playing) {
@@ -847,7 +924,7 @@ function escapeHtml(str) {
 function renderRoom() {
   if (!currentRoom) return;
   const roomMode = DIFFICULTY[currentRoom.config.difficulty]?.label || "Medium";
-  $("roomState").innerHTML = `<strong>Room ${currentRoom.code}</strong><br>Phase: ${currentRoom.phase}<br>Mode: ${roomMode}<br>Earthquake: ${fmt(currentRoom.config.amplitude)} m for ${fmt(currentRoom.config.pulseDuration)} s<br>Students: ${currentRoom.students.length}`;
+  $("roomState").innerHTML = `<strong>Room ${currentRoom.code}</strong><br>Phase: ${currentRoom.phase}${currentRoom.preview ? " (demo class)" : ""}<br>Mode: ${roomMode}<br>Earthquake: ${fmt(currentRoom.config.amplitude)} m for ${fmt(currentRoom.config.pulseDuration)} s<br>Students: ${currentRoom.students.length}`;
   $("studentState").textContent = `Room ${currentRoom.code}: ${currentRoom.phase}`;
   $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td>${escapeHtml(s.nickname)}</td><td>${fmt(s.tower.period)} s</td><td>${s.submission ? "yes" : "no"}</td></tr>`).join("");
   if (!currentStudent) return;
@@ -878,49 +955,57 @@ function renderCity() {
   const students = currentRoom.students.slice(0, 24);
   const pulse = currentRoom.quake;
   if (pulse?.startedAt && currentRoom.phase === "running" && pulse.startedAt !== lastCityStartedAt) {
-    cityStart = performance.now() - Math.max(0, Date.now() - pulse.startedAt);
+    cityStart = performance.now() - (Date.now() - pulse.startedAt);
     lastCityStartedAt = pulse.startedAt;
   }
   $("cityCaption").textContent = `Room ${currentRoom.code}: same earthquake for every tower.`;
   $("quakeBadge").textContent = pulse ? `${DIFFICULTY[pulse.difficulty]?.label || "Medium"}: ${fmt(pulse.amplitude)} m` : "Waiting";
-  const t = currentRoom.phase === "running" ? ((performance.now() - cityStart) / 1000) % (pulse?.runDuration || RUN_DURATION) : 0;
+  const t = currentRoom.phase === "running" ? Math.min(Math.max(0, (performance.now() - cityStart) / 1000), (pulse?.runDuration || RUN_DURATION) + 3.6) : 0;
+  const running = currentRoom.phase === "running" && !!pulse;
+  const remaining = running ? Math.max(0, (cityStart - performance.now()) / 1000) : 0;
+  const intro = remaining > 0;
+  $("quakeIntro").hidden = !intro;
+  canvas.hidden = intro;
+  $("cityResults").hidden = running && (intro || t < (pulse.runDuration || RUN_DURATION) + 3.6);
+  if (intro) {
+    playQuakeWarning(pulse.startedAt);
+    $("quakeCountdown").textContent = `Brace your buildings? skyline in ${Math.ceil(remaining)}!`;
+    $("quakeBadge").textContent = "Epicenter: Morristown, NJ";
+    $("cityCaption").textContent = "Incoming classroom quake!";
+    return;
+  }
+  if (running) {
+    const finished = t >= (pulse.runDuration || RUN_DURATION) + 3.6;
+    $("quakeBadge").textContent = finished ? "Aftermath" : t < pulse.duration ? "Ground shaking!" : "Ground stopped ? settling";
+    $("cityCaption").textContent = `Room ${currentRoom.code}: ${finished ? "the dust has settled." : t < pulse.duration ? "Hold on! The earthquake has reached the city." : "Watch which designs survive."}`;
+  }
+  const aftermath = running && t >= (pulse.runDuration || RUN_DURATION) + 3.6;
   const cell = w / Math.max(1, students.length);
   students.forEach((s, i) => {
     const result = s.result;
-    const idx = result?.samples?.length ? Math.min(result.samples.length - 1, Math.floor(t / 0.05)) : 0;
-    const sample = result?.samples?.[idx] || { sway: 0, theta: 0 };
+    const sampleTime = result?.failureTime != null ? Math.min(t, result.failureTime) : t;
+    const idx = result?.samples?.length ? Math.min(result.samples.length - 1, Math.floor(sampleTime / 0.05)) : 0;
+    const sample = result?.samples?.[idx] || { t: 0, y: 0, sway: 0, theta: 0, heat: 0 };
     const cx = cell * i + cell / 2;
-    const height = 120 + (s.tower.height - 170) / 180 * 180;
-    const width = Math.max(24, Math.min(48, cell * 0.5));
-    const amp = P.clamp(sample.sway * 32, -34, 34);
+    const fraction = P.clamp((s.tower.height - 170) / 180, 0, 1);
+    const height = 180 + fraction * 160;
+    const towerScale = Math.min(0.3, cell / 420);
+    const virtualHeight = height / towerScale + (118 - 60 * fraction) + 44;
+    const failureTime = result?.failureTime ?? result?.samples?.at(-1)?.t ?? Infinity;
+    const failed = result?.status === "failed" && (aftermath || t >= failureTime);
+    const run = {
+      tower: s.tower,
+      damper: s.submission || { enabled: false },
+      pulse: pulse || { dangerEnabled: false },
+      state: {},
+      failed,
+      collapseAge: failed ? (aftermath ? 3.6 : Math.max(0, t - failureTime)) : 0,
+      energyScale: Math.max(4000, s.tower.mass * 0.0012)
+    };
     ctx.save();
-    ctx.translate(cx, h - 48);
-    if (result?.status === "failed") ctx.rotate(0.18);
-    ctx.fillStyle = result?.status === "failed" ? "#8b3e3e" : result?.status === "damaged" ? "#b77200" : "#516a78";
-    ctx.beginPath();
-    ctx.moveTo(-width / 2, 0);
-    ctx.lineTo(width / 2, 0);
-    ctx.lineTo(width / 2 + amp, -height);
-    ctx.lineTo(-width / 2 + amp, -height);
-    ctx.closePath();
-    ctx.fill();
-    if (s.submission?.enabled) {
-      const pivotX = amp;
-      const pivotY = -height + 25;
-      const rod = Math.max(24, Math.min(58, s.submission.length * 4));
-      const bobX = pivotX + Math.sin(sample.theta) * rod;
-      const bobY = pivotY + Math.cos(sample.theta) * rod;
-      ctx.strokeStyle = "#111820";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(pivotX, pivotY);
-      ctx.lineTo(bobX, bobY);
-      ctx.stroke();
-      ctx.fillStyle = "#d2a12a";
-      ctx.beginPath();
-      ctx.arc(bobX, bobY, Math.max(4, width * 0.15), 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.translate(cx - 210 * towerScale, h - 48 - (virtualHeight - 44) * towerScale);
+    ctx.scale(towerScale, towerScale);
+    drawStage(sample, run, { width: 420, height: virtualHeight, getContext: () => ctx }, { background: false, danger: false });
     ctx.restore();
     ctx.fillStyle = "#17212b";
     ctx.font = "12px system-ui";
@@ -1030,9 +1115,9 @@ $("randomTowerBtn").addEventListener("click", () => {
   applyTowerInputs();
 });
 
-$("roomForm").addEventListener("submit", async event => {
-  event.preventDefault();
+async function createClassRoom(preview = false) {
   currentRoom = await api("/api/rooms", {
+    preview,
     seed: $("roomSeed").value,
     designMinutes: Number($("designMinutes").value),
     amplitude: selectedEarthquakeAmplitude("roomStrength"),
@@ -1042,7 +1127,27 @@ $("roomForm").addEventListener("submit", async event => {
     driftLimit: Number($("driftLimit").value)
   });
   connectRoom(currentRoom.code);
+  currentStudent = null;
+  renderRoom();
+  renderCity();
   setView("teacher");
+}
+
+$("roomForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  await createClassRoom();
+});
+$("previewClassBtn").addEventListener("click", async () => {
+  $("previewClassBtn").disabled = true;
+  $("previewState").textContent = "Creating demo class...";
+  try {
+    await createClassRoom(true);
+    $("previewState").textContent = "12 demo pair designs are ready. Start earthquake to watch the skyline, then Replay to watch again.";
+  } catch (error) {
+    $("previewState").textContent = error.message;
+  } finally {
+    $("previewClassBtn").disabled = false;
+  }
 });
 
 $("joinForm").addEventListener("submit", async event => {
@@ -1082,17 +1187,32 @@ $("lockBtn").addEventListener("click", async () => {
 });
 $("startBtn").addEventListener("click", async () => {
   if (!currentRoom) return;
+  prepareQuakeAudio();
   currentRoom = await api(`/api/rooms/${currentRoom.code}/start`);
-  cityStart = currentRoom.quake?.startedAt ? performance.now() - Math.max(0, Date.now() - currentRoom.quake.startedAt) : performance.now();
+  cityStart = currentRoom.quake?.startedAt ? performance.now() - (Date.now() - currentRoom.quake.startedAt) : performance.now();
   setView("city");
   renderRoom();
   renderCity();
 });
 $("replayBtn").addEventListener("click", async () => {
   if (!currentRoom) return;
+  prepareQuakeAudio();
   currentRoom = await api(`/api/rooms/${currentRoom.code}/replay`);
-  cityStart = currentRoom.quake?.startedAt ? performance.now() - Math.max(0, Date.now() - currentRoom.quake.startedAt) : performance.now();
+  cityStart = currentRoom.quake?.startedAt ? performance.now() - (Date.now() - currentRoom.quake.startedAt) : performance.now();
   setView("city");
+  renderRoom();
+  renderCity();
+});
+
+$("quakeSoundBtn").addEventListener("click", () => {
+  quakeSoundEnabled = !quakeSoundEnabled;
+  $("quakeSoundBtn").textContent = quakeSoundEnabled ? "Sound on" : "Sound off";
+  $("quakeSoundBtn").setAttribute("aria-pressed", String(quakeSoundEnabled));
+  if (!quakeSoundEnabled) stopQuakeSound();
+  else {
+    prepareQuakeAudio();
+    lastQuakeSoundAt = 0;
+  }
 });
 
 updateLabels();

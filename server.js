@@ -56,6 +56,7 @@ function codeFromSeed(seed) {
 function publicRoom(room) {
   return {
     code: room.code,
+    preview: room.preview || false,
     config: room.config,
     phase: room.phase,
     createdAt: room.createdAt,
@@ -143,7 +144,8 @@ function scoreRoom(room) {
     collapseTime: difficulty.collapseTime,
     runDuration: room.config.runDuration,
     driftLimit: room.config.driftLimit,
-    startedAt: Date.now()
+    introDurationMs: 10000,
+    startedAt: Date.now() + 10000
   };
   room.results = Array.from(room.students.values()).map(student => {
     const submission = student.submission || physics.defaultDamperFor(student.tower);
@@ -155,13 +157,32 @@ function scoreRoom(room) {
     if (a.result.status !== b.result.status) return a.result.status === "standing" ? -1 : 1;
     return a.result.settleTime - b.result.settleTime || a.result.hits - b.result.hits || a.result.peakSway - b.result.peakSway;
   });
+  room.quake.startedAt = Date.now() + room.quake.introDurationMs;
 }
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
     if (req.method === "POST" && url.pathname === "/api/rooms") {
-      const room = createRoom(await readBody(req));
+      const body = await readBody(req);
+      const room = createRoom(body);
+      if (body.preview === true) {
+        room.preview = true;
+        for (let i = 0; i < 12; i++) {
+          const student = ensureStudent(room, { nickname: `Pair ${String(i + 1).padStart(2, "0")}` });
+          const tuned = physics.defaultDamperFor(student.tower);
+          // A repeatable mix of tuned, mistuned, loose, locked, and bare towers.
+          const designs = [
+            { ...tuned, massRatio: 0.08, damping: 0.25 },
+            { ...tuned, massRatio: 0.06, damping: 0.45 },
+            { ...tuned, length: tuned.length * 0.55, massRatio: 0.035, damping: 0.45 },
+            { ...tuned, massRatio: 0.01, damping: 0 },
+            { ...tuned, massRatio: 0.04, damping: 1 },
+            { ...tuned, enabled: false }
+          ];
+          student.submission = physics.clampDamper(designs[i % designs.length]);
+        }
+      }
       return json(res, 200, publicRoom(room));
     }
 
@@ -230,7 +251,7 @@ const server = http.createServer(async (req, res) => {
       if (!room) return json(res, 404, { error: "Room not found" });
       room.phase = "running";
       if (!room.quake) scoreRoom(room);
-      else room.quake.startedAt = Date.now();
+      else room.quake.startedAt = Date.now() + (room.quake.introDurationMs || 10000);
       broadcast(room);
       return json(res, 200, publicRoom(room));
     }

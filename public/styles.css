@@ -579,3 +579,17 @@ th { color: #425160; }
 @media (max-width: 680px) {
   .compare-mode .stage-pair { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
 }
+
+.quake-intro[hidden] { display: none; }
+.quake-intro { margin-top: 12px; padding: clamp(12px, 2vw, 24px); border: 3px solid #d59a2d; border-radius: 22px; background: #fff8e5; box-shadow: 0 12px 35px rgba(112, 77, 22, .12); }
+.quake-alert-sign { display: flex; justify-content: center; align-items: center; gap: 18px; margin-bottom: 18px; color: #87352a; text-align: center; }
+.quake-alert-sign > span { font-size: clamp(44px, 7vw, 80px); line-height: 1; }
+.quake-alert-sign h2 { margin: 0; font-size: clamp(23px, 4vw, 46px); font-weight: 900; letter-spacing: .04em; }
+.quake-alert-sign p { margin: 6px 0 0; font-weight: 650; }
+.quake-map { display: block; width: 100%; max-height: 55vh; }
+.quake-ripple { transform-box: view-box; transform-origin: 544px 184px; animation: quake-ripple 2.4s ease-out infinite; }
+.ripple-two { animation-delay: -.8s; }
+.ripple-three { animation-delay: -1.6s; }
+.quake-countdown { margin: 16px 0 0; text-align: center; font-size: clamp(18px, 2.5vw, 25px); color: #87352a; font-weight: 800; }
+@keyframes quake-ripple { from { transform: scale(1); opacity: .95; } to { transform: scale(9); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .quake-ripple { animation: none; } .ripple-two { transform: scale(4); opacity: .5; } .ripple-three { transform: scale(7); opacity: .25; } }

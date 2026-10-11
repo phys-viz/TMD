@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=damping-slider-15">
+  <link rel="stylesheet" href="/styles.css?v=quake-intro-22">
 </head>
 <body>
   <header class="topbar">
@@ -166,7 +166,12 @@
           </label>
           <label>Run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
           <label>Sway limit (m)<input id="driftLimit" type="number" value="1.2" min="0.3" max="3" step="0.05"></label>
-          <button>Create room</button>
+          <div class="button-row">
+            <button>Create room</button>
+            <button id="previewClassBtn" type="button">Preview 12-pair class</button>
+          </div>
+          <p class="muted">Preview creates a separate room with 12 demo pairs and varied designs. Use Start earthquake to test the class.</p>
+          <p id="previewState" class="muted" role="status"></p>
         </form>
         <div class="panel">
           <h2>Teacher Controls</h2>
@@ -187,17 +192,41 @@
           <h2>City Challenge</h2>
           <p id="cityCaption">Create or join a room to see the shared skyline.</p>
         </div>
-        <div id="quakeBadge" class="badge">Waiting</div>
+        <div class="button-row"><button id="quakeSoundBtn" type="button" aria-pressed="true" aria-label="Earthquake warning sound">Sound on</button><div id="quakeBadge" class="badge">Waiting</div></div>
+      </div>
+      <div id="quakeIntro" class="quake-intro" hidden aria-labelledby="quakeAlertTitle">
+        <div class="quake-alert-sign"><span aria-hidden="true">?</span><div><h2 id="quakeAlertTitle">EARTHQUAKE ALERT!</h2><p>Morristown, New Jersey is making waves.</p></div></div>
+        <svg class="quake-map" viewBox="0 0 960 480" role="img" aria-labelledby="quakeMapTitle quakeMapDescription">
+          <title id="quakeMapTitle">Cartoon earthquake epicenter in Morristown, New Jersey</title>
+          <desc id="quakeMapDescription">A schematic of the eastern seaboard with New Jersey highlighted and circular ripples spreading from Morristown.</desc>
+          <defs><pattern id="oceanWaves" width="65" height="42" patternUnits="userSpaceOnUse"><path d="M8 23q12-12 24 0t24 0" fill="none" stroke="#79bdcf" stroke-width="3" opacity=".4"/></pattern></defs>
+          <rect width="960" height="480" rx="22" fill="#bde7ee"/>
+          <rect width="960" height="480" fill="url(#oceanWaves)"/>
+          <path d="M0 0H774L756 42 699 65 647 99 617 117 588 144 581 183 557 204 548 250 523 281 492 295 495 326 469 344 443 378 412 414 388 480H0Z" fill="#d8e8b2" stroke="#456c59" stroke-width="5" stroke-linejoin="round"/>
+          <g fill="none" stroke="#8fa979" stroke-width="3" stroke-dasharray="8 7"><path d="M100 134L497 134 588 144"/><path d="M497 134L470 205 470 274 492 295"/><path d="M72 300L470 300"/><path d="M46 387L428 387"/><path d="M617 117L679 121 699 65"/></g>
+          <path d="M547 146L581 153 581 183 557 204 548 250 523 281 506 268 513 243 498 223 508 195 532 177Z" fill="#ffcf63" stroke="#9a691e" stroke-width="4" stroke-linejoin="round"/>
+          <path d="M585 185L661 164 692 157 660 177 593 198Z" fill="#d8e8b2" stroke="#456c59" stroke-width="3"/>
+          <g class="map-labels" fill="#365346" font-family="system-ui, sans-serif" font-size="23" font-weight="800"><text x="270" y="110">NEW YORK</text><text x="228" y="230">PENNSYLVANIA</text><text x="199" y="355">MARYLAND</text><text x="158" y="438">VIRGINIA</text><text x="627" y="93" font-size="18">NEW ENGLAND</text></g>
+          <text x="702" y="319" fill="#39849b" font-family="system-ui, sans-serif" font-size="24" font-weight="700" transform="rotate(-16 702 319)">ATLANTIC OCEAN</text>
+          <g fill="none" stroke="#df5546" stroke-width="5" class="epicenter-ripples"><circle class="quake-ripple ripple-one" cx="544" cy="184" r="18"/><circle class="quake-ripple ripple-two" cx="544" cy="184" r="18"/><circle class="quake-ripple ripple-three" cx="544" cy="184" r="18"/></g>
+          <circle cx="544" cy="184" r="10" fill="#d94538" stroke="#fff" stroke-width="4"/>
+          <path d="M555 181L628 230H676" fill="none" stroke="#87352a" stroke-width="3"/>
+          <rect x="648" y="210" width="264" height="77" rx="14" fill="#fff9e9" stroke="#87352a" stroke-width="3"/>
+          <text x="780" y="242" text-anchor="middle" fill="#87352a" font-family="system-ui, sans-serif" font-size="25" font-weight="900">MORRISTOWN</text>
+          <text x="780" y="269" text-anchor="middle" fill="#9a691e" font-family="system-ui, sans-serif" font-size="17" font-weight="800">NEW JERSEY ? EPICENTER</text>
+          <text x="24" y="465" fill="#456c59" font-family="system-ui, sans-serif" font-size="14">Classroom quake ? schematic map</text>
+        </svg>
+        <p id="quakeCountdown" class="quake-countdown" role="status">Brace your buildings?</p>
       </div>
       <canvas id="cityCanvas" width="1100" height="480"></canvas>
-      <div class="panel">
+      <div id="cityResults" class="panel">
         <h2>Results</h2>
         <table id="resultsTable"><thead><tr><th>Rank</th><th>Name</th><th>Status</th><th>Settling</th><th>Peak sway</th><th>Wall hits</th><th>Thermal energy</th><th>Design</th></tr></thead><tbody></tbody></table>
       </div>
     </section>
   </main>
 
-  <script src="/physics.js?v=surface-contact-9"></script>
-  <script src="/app.js?v=plot-danger-time-16"></script>
+  <script src="/physics.js?v=failure-time-10"></script>
+  <script src="/app.js?v=quake-sound-25"></script>
 </body>
 </html>

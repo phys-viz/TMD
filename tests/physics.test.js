@@ -321,4 +321,10 @@ function contactAngle(tower, damper, side, sway = 0) {
   const disabled = P.stepSimulation(P.initialState({ initialTheta: 0.5, initialOmega: 1 }), 0.01, scenario, { ...damper, enabled: false }, noQuake);
   assert.strictEqual(disabled.hits, 0, "removing the TMD removes its contact failure");
 }
+{
+  const scenario = P.createLabTower(345, 11.5e6);
+  const failed = P.evaluateDesign(scenario, { enabled: false }, { ...P.defaultPulse(), runDuration: 20 });
+  assert.equal(failed.status, "failed");
+  assert(failed.failureTime > 3 && failed.failureTime < 20, "danger failure records its actual time rather than the end of the trial");
+}
 console.log("physics tests passed");

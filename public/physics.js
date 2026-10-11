@@ -386,6 +386,7 @@
     let peak = 0;
     let lastAbove = pulse.duration;
     let overLimitTime = 0;
+    let failureTime = null;
     const settleBand = options.settleBand || 0.06;
     const dangerEnabled = pulse.dangerEnabled !== false;
     const collapseSway = pulse.collapseSway ?? 0.5;
@@ -400,6 +401,8 @@
         nextSample += sampleDt;
       }
       state = stepSimulation(state, dt, tower, damper, pulse);
+      const failed = dangerLimitReached(overLimitTime, pulse) || peak > (pulse.driftLimit || 1.2) * 1.15;
+      if (failureTime === null && (failed || state.hits > 0)) failureTime = state.t;
       if (options.stopOnHit && state.hits > 0) {
         const finalSample = sampleState(state, tower, damper, pulse);
         samples.push(finalSample);
@@ -407,7 +410,7 @@
         break;
       }
     }
-    return { samples, peakSway: peak, settleTime: lastAbove, overLimitTime, final: state, heat: state.heat || 0, hits: state.hits || 0, hitSeverity: state.hitSeverity || 0 };
+    return { samples, failureTime, peakSway: peak, settleTime: lastAbove, overLimitTime, final: state, heat: state.heat || 0, hits: state.hits || 0, hitSeverity: state.hitSeverity || 0 };
   }
 
   function dangerLimitReached(dangerTime, pulse) {
@@ -432,6 +435,7 @@
       settleTime: designed.settleTime,
       improvement,
       status,
+      failureTime: status === "failed" ? (designed.failureTime ?? designed.final.t) : null,
       limit,
       heat: designed.heat,
       hits: designed.hits,
