@@ -951,6 +951,9 @@ function clearDeletedRoom(code) {
     $("studentState").textContent = "This room was deleted by the teacher.";
     $("studentTower").textContent = "Join a room to receive a tower.";
     $("submitState").textContent = "";
+    $("designEntry").hidden = false;
+    showJoined(false);
+    $("phaseSteps").innerHTML = "";
     $("roster").querySelector("tbody").innerHTML = "";
     $("resultsTable").querySelector("tbody").innerHTML = "";
     $("quakeIntro").hidden = true;
@@ -971,19 +974,33 @@ function escapeHtml(str) {
 function renderRoom() {
   if (!currentRoom) return;
   const teacher = teacherUnlocked && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
-  ["lockBtn", "unlockBtn", "startBtn", "replayBtn", "deleteRoomBtn"].forEach(id => { $(id).disabled = !teacher; });
-  $("lockBtn").disabled = !teacher || currentRoom.phase !== "design";
-  $("unlockBtn").disabled = !teacher || currentRoom.phase === "design";
+  const phase = currentRoom.phase;
+  // Only the controls that make sense in this phase are shown; the next step is the primary one.
+  const controls = {
+    design: { lockBtn: "primary", startBtn: "secondary" },
+    locked: { startBtn: "primary", unlockBtn: "secondary" },
+    running: { replayBtn: "primary", unlockBtn: "secondary" }
+  }[phase] || {};
+  for (const id of ["lockBtn", "startBtn", "replayBtn", "unlockBtn"]) {
+    $(id).hidden = !controls[id];
+    $(id).disabled = !teacher || !controls[id];
+    $(id).className = `button-${controls[id] || "secondary"}`;
+  }
+  $("deleteRoomBtn").disabled = !teacher;
   renderTeacherRooms();
   const roomMode = DIFFICULTY[currentRoom.config.difficulty]?.label || "Medium";
-  const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[currentRoom.phase] || currentRoom.phase;
-  $("roomState").innerHTML = `<div class="room-banner"><strong>Room <span class="room-code">${escapeHtml(currentRoom.code)}</span></strong><span class="status-chip status-${currentRoom.phase}">${escapeHtml(phaseLabel)}</span></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
+  const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[phase] || phase;
+  const site = typeof location !== "undefined" ? location.host : "";
+  $("roomState").innerHTML = `<div class="room-banner"><div class="join-callout">${site ? `<span>Join at <strong>${escapeHtml(site)}</strong> with code</span>` : "<span>Room code</span>"}<span class="room-code">${escapeHtml(currentRoom.code)}</span></div></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
+  const steps = [["design", "Design"], ["locked", "Locked"], ["running", "Earthquake"]];
+  const stepIndex = steps.findIndex(([key]) => key === phase);
+  $("phaseSteps").innerHTML = steps.map(([key, label], i) => `<li class="phase-step step-${key}${i === stepIndex ? " current" : i < stepIndex ? " done" : ""}"${i === stepIndex ? ' aria-current="step"' : ""}><span class="step-number">${i + 1}</span>${label}</li>`).join("");
   $("studentState").textContent = `Room ${currentRoom.code} · ${phaseLabel}`;
-  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td>${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-waiting"}">${s.submission ? "Submitted" : "Waiting"}</span></td><td>${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td>${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td>${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="button-danger remove-group" data-student-id="${escapeHtml(s.id)}" ${teacher ? "" : "disabled"}>Remove group</button></td></tr>`).join("");
+  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" title="Remove group" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
   const wasLocked = $("submitLength").disabled;
-  const locked = currentRoom.phase !== "design" || !currentStudent;
+  const locked = phase !== "design" || !currentStudent;
   ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = locked; });
-  if (!currentStudent) return;
+  if (!currentStudent) return showJoined(false);
   const latest = currentRoom.students.find(s => s.id === currentStudent.id);
   if (!latest) {
     currentStudent = null;
@@ -991,19 +1008,31 @@ function renderRoom() {
     ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = true; });
     $("studentTower").textContent = "Your group was removed from this room by the teacher.";
     $("submitState").textContent = "";
-    return;
+    $("designEntry").hidden = false;
+    return showJoined(false);
   }
   currentStudent = latest;
+  $("designEntry").hidden = locked;
   if (locked) {
     $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "";
     $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100, 1) : "";
     $("submitDamping").value = latest.submission ? fmt(latest.submission.damping) : "0";
-    $("submitState").textContent = "Room locked. Your submitted design is fixed until the teacher unlocks it.";
+    $("submitState").textContent = "";
   } else if (wasLocked) {
     $("submitState").textContent = "Room reopened. Change your settings and click Submit / revise to save them for the next earthquake.";
   }
-  $("studentTower").innerHTML = `<div class="assignment-heading"><strong>${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-waiting"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in Solo Lab. Measure the period and tune your TMD, then submit your settings here.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
+  const lockBanner = !locked ? "" : `<div class="lock-banner" role="status"><span aria-hidden="true">🔒</span> ${phase === "running" ? "Earthquake underway — watch the board!" : "Designs locked — watch the board."}${latest.submission ? "" : " No design was submitted, so your tower is tested without a TMD."}</div>`;
+  $("studentTower").innerHTML = `${lockBanner}<div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in Solo Lab. Measure the period and tune your TMD, then submit your settings here.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
+  $("joinedSummary").innerHTML = `<strong>${escapeHtml(latest.nickname)}</strong> · Room ${escapeHtml(currentRoom.code)} · ${escapeHtml(phaseLabel)}`;
+  if (!joinEditing) showJoined(true);
+}
 
+// Once a group has joined, the join form collapses to a one-line strip so the design card gets the width.
+let joinEditing = false;
+function showJoined(joined) {
+  $("joinFields").hidden = joined;
+  $("joinedStrip").hidden = !joined;
+  $("challengeLayout").classList.toggle("joined", joined);
 }
 
 // Room results pack City samples as integer arrays (see packCitySamples in src/rooms.js).
@@ -1209,7 +1238,6 @@ async function createClassRoom(preview = false) {
   currentRoom = await api("/api/rooms", {
     preview,
     seed: $("roomSeed").value,
-    designMinutes: Number($("designMinutes").value),
     amplitude: selectedEarthquakeAmplitude("roomStrength"),
     pulseDuration: EARTHQUAKE_DURATION,
     difficulty: $("roomDifficulty").value,
@@ -1292,6 +1320,7 @@ $("joinForm").addEventListener("submit", async event => {
     const data = await api(`/api/rooms/${code}/join`, { nickname, token });
     sessionStorage.setItem(key, data.token);
     currentStudent = data.student;
+    joinEditing = false;
     // New assignments start blank; reconnecting restores only the pair's own submission.
     $("submitLength").value = data.student.submission ? fmt(data.student.submission.length) : "";
     $("submitMass").value = data.student.submission ? fmt(data.student.submission.massRatio * 100, 1) : "";
@@ -1306,6 +1335,12 @@ $("joinForm").addEventListener("submit", async event => {
     $("studentTower").textContent = "Join a room to receive a tower.";
   }
 
+});
+
+$("changeJoinBtn").addEventListener("click", () => {
+  joinEditing = true;
+  showJoined(false);
+  $("nickname").focus?.();
 });
 
 $("submitForm").addEventListener("submit", async event => {
@@ -1361,7 +1396,7 @@ $("lockBtn").addEventListener("click", async () => {
   try {
     currentRoom = await api(`/api/rooms/${currentRoom.code}/lock`);
     renderRoom();
-    $("teacherRoomStatus").textContent = "Designs locked.";
+    $("teacherRoomStatus").textContent = "";
   } catch (error) { $("teacherRoomStatus").textContent = error.message; }
 });
 $("unlockBtn").addEventListener("click", async () => {
@@ -1371,7 +1406,7 @@ $("unlockBtn").addEventListener("click", async () => {
     stopQuakeSound();
     renderRoom();
     renderCity();
-    $("teacherRoomStatus").textContent = "Room reopened. Groups can join and revise their designs.";
+    $("teacherRoomStatus").textContent = "";
   } catch (error) { $("teacherRoomStatus").textContent = error.message; }
 });
 $("deleteRoomBtn").addEventListener("click", async () => {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-26">
+  <link rel="stylesheet" href="/styles.css?v=classroom-27">
 </head>
 <body>
   <header class="topbar">
@@ -126,24 +126,32 @@
     </section>
 
     <section id="student" class="view">
-      <div class="two-col challenge-layout">
+      <div id="challengeLayout" class="two-col challenge-layout">
         <form id="joinForm" class="panel">
+          <div id="joinFields">
           <h2>Join Challenge</h2>
           <p class="section-intro">Your group, your tower.</p>
           <label>Room code <input id="studentRoom" autocomplete="off" maxlength="8"></label>
           <label>Group name / names <input id="nickname" autocomplete="off" maxlength="24" value="Group"></label>
           <button>Join / reconnect</button>
           <p id="studentState" class="muted"></p>
+          </div>
+          <div id="joinedStrip" class="joined-strip" hidden>
+            <span id="joinedSummary"></span>
+            <button id="changeJoinBtn" type="button" class="button-secondary">Change name</button>
+          </div>
         </form>
         <form id="submitForm" class="panel" novalidate>
           <h2>Submit Design</h2>
           <div id="studentTower" class="readout">Join a room to receive a tower.</div>
+          <div id="designEntry">
           <div class="design-fields">
           <label>Pendulum length (m)<input id="submitLength" required type="number" min="0.7" max="17.7" step="0.05"></label>
           <label>TMD mass (%)<input id="submitMass" required type="number" min="1" max="10" step="any"></label>
           <label>Damping<input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
           </div>
           <button id="submitDesignBtn">Submit / revise before lock</button>
+          </div>
           <p id="submitState" class="muted" role="status" aria-live="polite"></p>
         </form>
       </div>
@@ -164,7 +172,6 @@
           <h2>Room setup</h2>
           <p class="section-intro">Set the challenge, then invite your groups.</p>
           <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
-          <label>Design minutes <input id="designMinutes" type="number" value="12" min="1" max="60"></label>
           <div id="roomStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
               <button type="button" data-strength="gentle" aria-pressed="false">Gentle</button>
               <button type="button" data-strength="moderate" aria-pressed="true">Moderate</button>
@@ -196,14 +203,16 @@
           <p id="teacherRoomStatus" class="muted" role="status"></p>
           <div id="roomState" class="readout">No room yet.</div>
           <h3 class="dashboard-section-title">Earthquake controls</h3>
+          <ol id="phaseSteps" class="phase-steps" aria-label="Room phase"></ol>
           <div class="button-row earthquake-actions">
-            <button id="startBtn" class="button-primary">Start earthquake</button>
-            <button id="replayBtn" class="button-secondary">Replay</button>
-            <button id="lockBtn" class="button-warning">Lock designs</button>
-            <button id="unlockBtn" class="button-warning">Unlock for revisions</button>
+            <button id="lockBtn" class="button-primary">Lock designs</button>
+            <button id="startBtn" class="button-secondary">Start earthquake</button>
+            <button id="replayBtn" class="button-secondary">Replay earthquake</button>
+            <button id="unlockBtn" class="button-secondary">Unlock for revisions</button>
           </div>
-          <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3><button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button></div>
-          <div class="roster-scroll"><table id="roster"><thead><tr><th>Group</th><th>Tower period</th><th>Status</th><th>Pendulum length</th><th>TMD mass</th><th>Damping</th><th></th></tr></thead><tbody></tbody></table></div>
+          <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3></div>
+          <div class="roster-scroll"><table id="roster"><thead><tr><th>Group</th><th class="num">Tower period</th><th>Status</th><th class="num">Pendulum length</th><th class="num">TMD mass</th><th class="num">Damping</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody></tbody></table></div>
+          <div class="room-danger"><button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button></div>
         </div>
       </div>
     </section>
@@ -249,6 +258,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-32"></script>
+  <script src="/app.js?v=classroom-33"></script>
 </body>
 </html>
