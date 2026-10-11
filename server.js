@@ -7,11 +7,8 @@ const physics = require("./public/physics.js");
 const publicDir = path.join(__dirname, "public");
 const rooms = new Map();
 
-const difficultySettings = {
-  easy: { difficulty: "easy", dangerEnabled: false, collapseSway: physics.dangerSway, collapseTime: 3 },
-  medium: { difficulty: "medium", dangerEnabled: true, collapseSway: physics.dangerSway, collapseTime: 3 },
-  hard: { difficulty: "hard", dangerEnabled: true, collapseSway: physics.dangerSway, collapseTime: 2.5 }
-};
+const { maxGroups, createRoom, publicRoom, ensureStudent, scoreRoom, removeStudent } = require("./src/rooms.js");
+const teacherAuth = require("./src/teacher-auth.js");
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -42,130 +39,42 @@ function readBody(req) {
   });
 }
 
-function codeFromSeed(seed) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let n = physics.hashSeed(seed + Date.now());
-  let code = "";
-  for (let i = 0; i < 5; i++) {
-    code += alphabet[n % alphabet.length];
-    n = Math.floor(n / alphabet.length);
-  }
-  return code;
-}
-
-function publicRoom(room) {
-  return {
-    code: room.code,
-    preview: room.preview || false,
-    config: room.config,
-    phase: room.phase,
-    createdAt: room.createdAt,
-    quake: room.quake,
-    students: Array.from(room.students.values()).map(s => ({
-      id: s.id,
-      nickname: s.nickname,
-      tower: s.tower,
-      submission: s.submission,
-      result: s.result
-    })),
-    results: room.results
-  };
-}
-
 function broadcast(room) {
   const payload = `data: ${JSON.stringify(publicRoom(room))}\n\n`;
   for (const client of room.clients) client.write(payload);
 }
-
 function getRoom(code) {
-  return rooms.get(String(code || "").trim().toUpperCase());
-}
-
-function createRoom(body) {
-  const seed = body.seed || `room-${Date.now()}`;
-  const difficulty = difficultySettings[body.difficulty] ? body.difficulty : "medium";
-  let code = String(body.code || "").trim().toUpperCase();
-  if (!code) {
-    do code = codeFromSeed(seed + Math.random());
-    while (rooms.has(code));
-  }
-  const room = {
-    code,
-    createdAt: Date.now(),
-    phase: "design",
-    clients: new Set(),
-    students: new Map(),
-    quake: null,
-    results: [],
-    config: {
-      seed,
-      designMinutes: Number(body.designMinutes) || 12,
-      amplitude: Number(body.amplitude) || physics.earthquakeStrengths.moderate,
-      pulseDuration: Number(body.pulseDuration) || physics.earthquakeDuration,
-      difficulty,
-      runDuration: Number(body.runDuration) || 120,
-      driftLimit: Number(body.driftLimit) || 1.2
-    }
-  };
-  rooms.set(code, room);
-  return room;
-}
-
-function ensureStudent(room, body) {
-  const nickname = String(body.nickname || "Student").slice(0, 24);
-  const token = String(body.token || physics.makeId("tok")).slice(0, 80);
-  let student = Array.from(room.students.values()).find(s => s.token === token);
-  if (!student) {
-    const index = room.students.size;
-    const id = physics.makeId("stu");
-    student = {
-      id,
-      token,
-      nickname,
-      tower: physics.generateTower(room.config.seed, index),
-      submission: null,
-      result: null
-    };
-    room.students.set(id, student);
-  } else {
-    student.nickname = nickname;
-  }
-  return student;
-}
-
-function scoreRoom(room) {
-  const difficulty = difficultySettings[room.config.difficulty] || difficultySettings.medium;
-  room.quake = {
-    amplitude: room.config.amplitude,
-    duration: room.config.pulseDuration,
-    difficulty: difficulty.difficulty,
-    dangerEnabled: difficulty.dangerEnabled,
-    collapseSway: difficulty.collapseSway,
-    collapseTime: difficulty.collapseTime,
-    runDuration: room.config.runDuration,
-    driftLimit: room.config.driftLimit,
-    introDurationMs: 10000,
-    startedAt: Date.now() + 10000
-  };
-  room.results = Array.from(room.students.values()).map(student => {
-    const submission = student.submission || physics.defaultDamperFor(student.tower);
-    const result = physics.evaluateDesign(student.tower, submission, { ...room.quake, collapseSway: student.tower.dangerSwayLimit ?? physics.dangerSway });
-    student.submission = submission;
-    student.result = result;
-    return { studentId: student.id, nickname: student.nickname, tower: student.tower, submission, result };
-  }).sort((a, b) => {
-    if (a.result.status !== b.result.status) return a.result.status === "standing" ? -1 : 1;
-    return a.result.settleTime - b.result.settleTime || a.result.hits - b.result.hits || a.result.peakSway - b.result.peakSway;
-  });
-  room.quake.startedAt = Date.now() + room.quake.introDurationMs;
+  const room = rooms.get(String(code || "").trim().toUpperCase());
+  return room && room.expiresAt > Date.now() ? room : null;
 }
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
+    if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { status: "ok" });
+    const origin = req.headers.origin;
+    if (origin && origin !== url.origin) return json(res, 403, { error: "Use the app on its own website." });
+    const teacher = await teacherAuth.isTeacher(process.env.TEACHER_PASSWORD, req.headers.cookie || "");
+    if (url.pathname === "/api/teacher/session" && req.method === "GET") return json(res, 200, { teacher });
+    if (url.pathname === "/api/teacher/login" && req.method === "POST") {
+      const body = await readBody(req);
+      const cookie = await teacherAuth.login(process.env.TEACHER_PASSWORD, body.password, false);
+      if (!cookie) return json(res, 403, { error: "Incorrect teacher password." });
+      res.setHeader("Set-Cookie", cookie);
+      return json(res, 200, { teacher: true });
+    }
+    if (url.pathname === "/api/teacher/logout" && req.method === "POST") {
+      res.setHeader("Set-Cookie", teacherAuth.logout(false));
+      return json(res, 200, { teacher: false });
+    }
+    const teacherAction = req.method === "POST" && (url.pathname === "/api/rooms" || /\/(lock|unlock|start|replay|delete|remove-student)$/.test(url.pathname));
+    if (teacherAction && !teacher) return json(res, 403, { error: "Enter the teacher password to use teacher controls." });
+
     if (req.method === "POST" && url.pathname === "/api/rooms") {
       const body = await readBody(req);
-      const room = createRoom(body);
+      let room;
+      do room = createRoom({ ...body, code: undefined }); while (rooms.has(room.code));
+      rooms.set(room.code, room);
       if (body.preview === true) {
         room.preview = true;
         for (let i = 0; i < 12; i++) {
@@ -183,7 +92,7 @@ const server = http.createServer(async (req, res) => {
           student.submission = physics.clampDamper(designs[i % designs.length]);
         }
       }
-      return json(res, 200, publicRoom(room));
+      return json(res, 200, { ...publicRoom(room), teacherToken: room.teacherToken });
     }
 
     if (req.method === "GET" && url.pathname.startsWith("/api/rooms/")) {
@@ -198,12 +107,17 @@ const server = http.createServer(async (req, res) => {
       if (!room) return json(res, 404, { error: "Room not found" });
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
         Connection: "keep-alive"
       });
       room.clients.add(res);
       res.write(`data: ${JSON.stringify(publicRoom(room))}\n\n`);
-      req.on("close", () => room.clients.delete(res));
+      const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 20000);
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        room.clients.delete(res);
+      });
       return;
     }
 
@@ -211,7 +125,11 @@ const server = http.createServer(async (req, res) => {
       const code = url.pathname.split("/")[3];
       const room = getRoom(code);
       if (!room) return json(res, 404, { error: "Room not found" });
-      const student = ensureStudent(room, await readBody(req));
+      const body = await readBody(req);
+      const existing = Array.from(room.students.values()).find(s => s.token === body.token);
+      if (!existing && room.phase !== "design") return json(res, 409, { error: "This room is locked to new groups" });
+      if (!existing && room.students.size >= maxGroups) return json(res, 409, { error: `This room is full (${maxGroups} groups)` });
+      const student = ensureStudent(room, body);
       broadcast(room);
       return json(res, 200, { token: student.token, student, room: publicRoom(room) });
     }
@@ -224,15 +142,54 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const student = Array.from(room.students.values()).find(s => s.token === body.token);
       if (!student) return json(res, 404, { error: "Student token not found" });
+      const d = body.submission;
+      if (!d || !Number.isFinite(d.length) || d.length < .7 || d.length > 17.7 || !Number.isFinite(d.massRatio) || d.massRatio < .01 || d.massRatio > .1 || !Number.isFinite(d.damping) || d.damping < 0 || d.damping > 1)
+        return json(res, 400, { error: "Enter length 0.7–17.7 m, mass 1–10%, and damping 0–1." });
       student.submission = physics.clampDamper({ wallLimit: 2.7, ...(body.submission || {}) });
       broadcast(room);
       return json(res, 200, { student, room: publicRoom(room) });
+    }
+
+    if (req.method === "POST" && /^\/api\/rooms\/[^/]+\/(lock|unlock|start|replay|delete|remove-student)$/.test(url.pathname)) {
+      const room = getRoom(url.pathname.split("/")[3]);
+      if (!room) return json(res, 404, { error: "Room not found" });
+      if (req.headers["x-teacher-token"] !== room.teacherToken) return json(res, 403, { error: "Only this room's teacher can use this control." });
+    }
+
+    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/remove-student$/)) {
+      const room = getRoom(url.pathname.split("/")[3]);
+      const { studentId } = await readBody(req);
+      if (!removeStudent(room, studentId)) return json(res, 404, { error: "Group not found" });
+      broadcast(room);
+      return json(res, 200, publicRoom(room));
+    }
+
+    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/delete$/)) {
+      const room = getRoom(url.pathname.split("/")[3]);
+      if (!room) return json(res, 404, { error: "Room not found" });
+      rooms.delete(room.code);
+      for (const client of room.clients) {
+        client.end(`data: ${JSON.stringify({ deleted: true, code: room.code })}\n\n`);
+      }
+      room.clients.clear();
+      return json(res, 200, { deleted: true, code: room.code });
     }
 
     if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/lock$/)) {
       const room = getRoom(url.pathname.split("/")[3]);
       if (!room) return json(res, 404, { error: "Room not found" });
       room.phase = "locked";
+      broadcast(room);
+      return json(res, 200, publicRoom(room));
+    }
+
+    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/unlock$/)) {
+      const room = getRoom(url.pathname.split("/")[3]);
+      if (!room) return json(res, 404, { error: "Room not found" });
+      room.phase = "design";
+      room.quake = null;
+      room.results = [];
+      for (const student of room.students.values()) student.result = null;
       broadcast(room);
       return json(res, 200, publicRoom(room));
     }
@@ -250,8 +207,7 @@ const server = http.createServer(async (req, res) => {
       const room = getRoom(url.pathname.split("/")[3]);
       if (!room) return json(res, 404, { error: "Room not found" });
       room.phase = "running";
-      if (!room.quake) scoreRoom(room);
-      else room.quake.startedAt = Date.now() + (room.quake.introDurationMs || 10000);
+      scoreRoom(room);
       broadcast(room);
       return json(res, 200, publicRoom(room));
     }
@@ -269,6 +225,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-server.listen(port, () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`TMD Skyscraper Lab running at http://localhost:${port}`);
 });

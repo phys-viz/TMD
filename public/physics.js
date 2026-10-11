@@ -3,6 +3,7 @@
   else root.TMDPhysics = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   const g = 9.81;
+  const trialStep = 0.004;
   const dangerSway = 0.2;
   const hydraulicDamperCount = 2;
   const hydraulicBodyPx = 44;
@@ -51,7 +52,7 @@
   function clampDamper(d) {
     return {
       enabled: d.enabled !== false,
-      length: clamp(d.length, 0.7, 18),
+      length: clamp(d.length, 0.7, 17.7),
       massRatio: clamp(d.massRatio, 0.01, 0.10),
       damping: clamp(d.damping, 0, 1),
       wallLimit: clamp(d.wallLimit ?? d.clearance ?? 2.7, 1.2, 5),
@@ -95,6 +96,14 @@
       // Game tolerance balances the shorter-period towers under a common quake.
       dangerSwayLimit: Math.round(dangerSway * Math.max(1, (6 / period) ** 2) * 100) / 100
     };
+  }
+
+  function generateChallengeTower(seed, index) {
+    const random = rng(`${seed}:challenge:${index}`);
+    const height = Math.round(labTowerLimits.minHeight + random() * (labTowerLimits.maxHeight - labTowerLimits.minHeight));
+    // Match the precision students can enter in Solo Lab: whole meters and 0.1 million kg.
+    const mass = Math.round((labTowerLimits.minMass + random() * (labTowerLimits.maxMass - labTowerLimits.minMass)) / 1e5) * 1e5;
+    return { ...createLabTower(height, mass), name: `Tower ${index + 1}` };
   }
 
   function createLabTower(height, mass) {
@@ -245,21 +254,30 @@
     return advance(dt, midpoint);
   }
 
-  function pendulumGeometry(tower, damper, sway = 0) {
-    const d = clampDamper(damper);
+  function towerGeometry(tower) {
     const heightFraction = clamp((tower.height - labTowerLimits.minHeight) /
       (labTowerLimits.maxHeight - labTowerLimits.minHeight), 0, 1);
-    const top = 118 - 60 * heightFraction, bottom = 436, pivotY = top + 2;
+    return {
+      width: 420, height: 480, top: 118 - 60 * heightFraction, bottom: 436,
+      towerWidth: 216, swayScale: 132,
+      columnWidth: 4 + 4 * clamp((tower.mass - labTowerLimits.minMass) /
+        (labTowerLimits.maxMass - labTowerLimits.minMass), 0, 1)
+    };
+  }
+
+  function pendulumGeometry(tower, damper, sway = 0) {
+    const d = clampDamper(damper);
+    const layout = towerGeometry(tower);
+    const { top, bottom, columnWidth } = layout;
+    const pivotY = top + 2;
     const lengthPx = clamp(d.length * 15, 45, 190);
     const bobRadiusPx = clamp(9 + d.massRatio * 190, 11, 23);
     // Keep mounts above the bob for short pendulums, leaving room for each
     // rigid housing; longer pendulums use the same upper-column mounting area.
     const anchorY = top + clamp(lengthPx - 70, 16, 60);
-    const mountSlope = sway * 132 / (bottom - top);
+    const mountSlope = sway * layout.swayScale / (bottom - top);
     const shearOffset = -mountSlope * (anchorY - top);
     const leftAnchorOffset = -108 + shearOffset, rightAnchorOffset = 108 + shearOffset;
-    const columnWidth = 4 + 4 * clamp((tower.mass - labTowerLimits.minMass) /
-      (labTowerLimits.maxMass - labTowerLimits.minMass), 0, 1);
     return { lengthPx, bobRadiusPx, anchorY, leftAnchorOffset, rightAnchorOffset, mountSlope, columnWidth, top, pivotY };
   }
 
@@ -374,6 +392,18 @@
     return next;
   }
 
+  function advanceTrial(state, dt, tower, damper, pulse, overLimitTime = 0) {
+    const next = stepSimulation(state, dt, tower, damper, pulse);
+    const sample = sampleState(next, tower, damper, pulse);
+    const dangerDt = Math.max(0, next.t - Math.max(state.t, pulse.duration));
+    if (pulse.dangerEnabled !== false && Math.abs(sample.sway) > (pulse.collapseSway ?? dangerSway)) overLimitTime += dangerDt;
+    const failed = sample.hits > 0 || dangerLimitReached(overLimitTime, pulse);
+    return {
+      state: next, sample, overLimitTime, failed,
+      failureCause: failed ? (sample.hits > 0 ? "Collision \u2014 failed" : "Danger limit \u2014 failed") : null
+    };
+  }
+
   function simulate(options) {
     const tower = options.tower;
     const damper = options.damper && options.damper.enabled ? clampDamper(options.damper) : { enabled: false };
@@ -388,22 +418,21 @@
     let overLimitTime = 0;
     let failureTime = null;
     const settleBand = options.settleBand || 0.06;
-    const dangerEnabled = pulse.dangerEnabled !== false;
-    const collapseSway = pulse.collapseSway ?? 0.5;
     while (state.t < duration - 1e-9) {
       const sample = sampleState(state, tower, damper, pulse);
       peak = Math.max(peak, Math.abs(sample.sway));
       if (state.t > pulse.duration && Math.abs(sample.sway) > settleBand) lastAbove = state.t;
-      const dt = Math.min(sampleDt / 4, duration - state.t);
-      if (dangerEnabled && state.t >= pulse.duration && Math.abs(sample.sway) > collapseSway) overLimitTime += dt;
+      const dt = Math.min(trialStep, duration - state.t);
       if (state.t >= nextSample - 1e-9) {
         samples.push(sample);
         nextSample += sampleDt;
       }
-      state = stepSimulation(state, dt, tower, damper, pulse);
-      const failed = dangerLimitReached(overLimitTime, pulse) || peak > (pulse.driftLimit || 1.2) * 1.15;
+      const trial = advanceTrial(state, dt, tower, damper, pulse, overLimitTime);
+      state = trial.state;
+      overLimitTime = trial.overLimitTime;
+      const failed = trial.failed;
       if (failureTime === null && (failed || state.hits > 0)) failureTime = state.t;
-      if (options.stopOnHit && state.hits > 0) {
+      if ((options.stopOnHit && state.hits > 0) || (options.stopOnFailure && failed)) {
         const finalSample = sampleState(state, tower, damper, pulse);
         samples.push(finalSample);
         peak = Math.max(peak, Math.abs(finalSample.sway));
@@ -421,13 +450,13 @@
     const p = { ...defaultPulse(), collapseSway: tower.dangerSwayLimit ?? dangerSway, ...(pulse || {}) };
     const duration = p.runDuration || 120;
     const baseline = simulate({ tower, damper: { enabled: false }, pulse: p, duration, sampleDt: 0.05 });
-    const designed = simulate({ tower, damper, pulse: p, duration, sampleDt: 0.05, stopOnHit: true });
+    const designed = simulate({ tower, damper, pulse: p, duration, sampleDt: 0.05, stopOnHit: true, stopOnFailure: true });
     const improvement = baseline.settleTime > 0 ? 100 * (baseline.settleTime - designed.settleTime) / baseline.settleTime : 0;
     const limit = p.driftLimit || 1.2;
     const dangerEnabled = p.dangerEnabled !== false;
     const collapseSway = p.collapseSway ?? 0.5;
     const collapseTime = p.collapseTime ?? 3;
-    const status = designed.hits > 0 || dangerLimitReached(designed.overLimitTime, p) || designed.peakSway > limit * 1.15 ? "failed" : "standing";
+    const status = designed.hits > 0 || dangerLimitReached(designed.overLimitTime, p) ? "failed" : "standing";
     return {
       baselinePeak: baseline.peakSway,
       peakSway: designed.peakSway,
@@ -436,6 +465,7 @@
       improvement,
       status,
       failureTime: status === "failed" ? (designed.failureTime ?? designed.final.t) : null,
+      contact: designed.final.contact || null,
       limit,
       heat: designed.heat,
       hits: designed.hits,
@@ -465,10 +495,12 @@
 
   return {
     g,
+    trialStep,
     dangerSway,
     hydraulicDamperCount,
     hydraulicBodyPx,
     pendulumAngleScale,
+    towerGeometry,
     pendulumGeometry,
     pendulumContact,
     earthquakeDuration,
@@ -482,6 +514,7 @@
     clampDamper,
     defaultDamperFor,
     generateTower,
+    generateChallengeTower,
     createLabTower,
     defaultPulse,
     baseMotion,
@@ -490,6 +523,7 @@
     initialState,
     sampleState,
     stepSimulation,
+    advanceTrial,
     simulate,
     evaluateDesign,
     dangerLimitReached,

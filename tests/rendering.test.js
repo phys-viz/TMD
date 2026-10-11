@@ -20,7 +20,9 @@ function render(bobX, bobY) {
   };
   context.drawHydraulicDamper(ctx, 0, 0, bobX, bobY, 15, -1, "gray");
   const length = stroke => Math.hypot(stroke.end.x - stroke.start.x, stroke.end.y - stroke.start.y);
-  return { housing: length(strokes.find(s => s.width === 8)), rod: length(strokes.find(s => s.width === 4)) };
+  const rodStroke = strokes.find(s => s.width === 4);
+  assert.deepEqual(rodStroke.end, { x: bobX, y: bobY }, "hydraulic rods extend behind the TMD ball to keep the joint connected");
+  return { housing: length(strokes.find(s => s.width === 8)), rod: length(rodStroke) };
 }
 
 const closeBob = render(70, 0);
@@ -106,6 +108,9 @@ function contactAngle(tower, damper, side = 1, sway = 0) {
 app.contactAngle = contactAngle;
 vm.runInContext(source, app);
 const state = () => vm.runInContext("sim", app);
+assert.equal(state().damper.damping, 0, "Solo Lab starts with zero damping");
+assert.equal(Number(dom.compareDampingInput.value), 0, "comparison starts with zero damping");
+assert.equal(Number(dom.submitDamping.value), 0, "new challenge submissions start with zero damping");
 assert.strictEqual(vm.runInContext("graphRange().start", app), 0, "Solo graph starts at zero by default");
 assert.strictEqual(vm.runInContext("graphRange().end", app), 120, "Solo graph shows the full 120-second trial by default");
 const geometry = () => ({
@@ -431,6 +436,12 @@ assert.equal(cityDrawings.filter(d => d.method === "roundRect" && d.fillColor ==
 assert.equal(cityDrawings.filter(d => d.method === "stroke" && d.width === 8).length, 24, "each pair has both hydraulic housings");
 assert.equal(cityDrawings.filter(d => d.method === "fillText" && String(d.args[0]).startsWith("Pair ")).length, 12, "all pairs keep readable skyline labels");
 assert.equal(cityDrawings.filter(d => d.method === "fillRect" && d.args[2] === 420).length, 0, "individual towers do not paint over their neighbors");
+const cityScales = cityDrawings.filter(d => d.method === "scale");
+for (let i = 0; i < cityScales.length; i += 2) {
+  const [sx, sy] = cityScales[i].args;
+  const [bx, by] = cityScales[i + 1].args;
+  assert(Math.abs(sx * bx - sy * by) < 1e-9, "city bobs have equal horizontal and vertical display scales");
+}
 // The original buckle remains, followed by a ground-level rubble ending.
 function collapseDrawing(age) {
   dom.stage.ctx.drawings.length = 0;
@@ -460,7 +471,7 @@ assert.equal(dom.cityCanvas.hidden, false, "skyline is revealed from the start o
 assert.equal(dom.quakeBadge.textContent, "Ground shaking!");
 clock = sequenceStart + 13500;
 vm.runInContext("renderCity()", app);
-assert.equal(dom.quakeBadge.textContent, "Ground stopped ? settling");
+assert.equal(dom.quakeBadge.textContent, "Ground stopped — settling");
 clock = sequenceStart + 34500;
 vm.runInContext("renderCity()", app);
 assert.equal(dom.quakeBadge.textContent, "Aftermath");
@@ -470,6 +481,8 @@ vm.runInContext(`currentRoom.students = [ { ...currentRoom.students[0], result: 
 dom.cityCanvas.ctx.drawings.length = 0;
 vm.runInContext("renderCity()", app);
 assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "fillRect" && ["#723a37", "#c4d4da", "#9d7970", "#0f7b7e"].includes(d.fillColor)).length, 56, "late failures finish with all rubble fragments before the clock stops");
+const failureScales = dom.cityCanvas.ctx.drawings.filter(d => d.method === "scale");
+assert(Math.abs(failureScales[0].args[0] * failureScales.at(-1).args[0] - failureScales[0].args[1] * failureScales.at(-1).args[1]) < 1e-9, "FAILED text has equal horizontal and vertical scales in City");
 dom.cityCanvas.ctx.drawings.length = 0;
 vm.runInContext("currentRoom.students[0].result.failureTime = 21; renderCity()", app);
 assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "quadraticCurveTo").length, 0, "aftermath explicitly removes all failed structures even with late failure timestamps");
@@ -496,4 +509,183 @@ assert.equal(warningOscillators.length, 3, "muted intros remain silent");
 dom.quakeSoundBtn.dispatch("click");
 vm.runInContext("playQuakeWarning(200)", app);
 assert.equal(warningOscillators.length, 6, "a new intro can sound after unmuting");
-console.log("rendering tests passed");
+dom.roster.querySelector = () => ({ innerHTML: "" });
+vm.runInContext(`currentRoom.config = { difficulty: "medium", amplitude: .62, pulseDuration: 3 }; currentRoom.students[0].id = "assigned-pair"; currentStudent = currentRoom.students[0]; currentStudent.submission = null; renderRoom()`, app);
+assert(!dom.studentTower.innerHTML.includes("Natural period"), "challenge hides the period");
+assert(!dom.studentTower.innerHTML.includes("calculated length"), "challenge hides the calculated TMD length");
+assert(dom.studentTower.innerHTML.includes("Use this height and mass in Solo Lab"), "assignment explains the independent lab workflow");
+assert.equal(dom.submitLength.value, "", "rendering an assignment does not fill in a tuned length");
+const originalQueryAll = app.document.querySelectorAll;
+const views = ["lab", "student", "teacherLogin", "teacher", "city"].map(id => { dom[id].id = id; return dom[id]; });
+app.document.querySelectorAll = selector => selector === ".view" ? views : originalQueryAll(selector);
+vm.runInContext("teacherUnlocked = false; setView('teacher')", app);
+assert.equal(dom.teacher.classList.contains("active"), false, "locked teachers cannot see the dashboard");
+assert.equal(dom.teacherLogin.classList.contains("active"), true, "Teacher tab opens the password form");
+vm.runInContext("teacherUnlocked = true; setView('teacher')", app);
+assert.equal(dom.teacher.classList.contains("active"), true, "authenticated teachers can open the dashboard");
+// City scales the complete canonical scene; mounts stay on both columns while swaying.
+for (const height of [170, 350]) for (const mass of [7.5e6, 15e6]) for (const sway of [-.8, .8]) {
+  dom.cityCanvas.ctx.drawings.length = 0;
+  vm.runInContext(`currentRoom = {
+    code: "GEOMETRY", phase: "design", config: {}, quake: null, results: [],
+    students: [{ nickname: "Mount test", tower: P.createLabTower(${height}, ${mass}),
+      submission: { enabled: true, length: 10.3, massRatio: .04, damping: .45 },
+      result: { status: "standing", samples: [{ t: 0, y: .3, sway: ${sway}, theta: .1, heat: 0 }] } }]
+  }; renderCity()`, app);
+  const P = app.window.TMDPhysics;
+  const tower = P.createLabTower(height, mass);
+  const layout = P.towerGeometry(tower);
+  const g = P.pendulumGeometry(tower, { enabled: true, length: 10.3, massRatio: .04, damping: .45 }, sway);
+  const commands = dom.cityCanvas.ctx.drawings;
+  const housings = commands.map((command, index) => ({ ...command, index })).filter(d => d.method === "stroke" && d.width === 8 && /^rgb/.test(d.color));
+  assert.equal(housings.length, 2);
+  housings.forEach((housing, index) => {
+    const mount = commands.slice(0, housing.index).findLast(d => d.method === "moveTo").args;
+    const side = index === 0 ? -1 : 1;
+    const wallX = layout.width / 2 + .3 * layout.swayScale + sway * layout.swayScale * (layout.bottom - g.anchorY) / (layout.bottom - layout.top) + side * layout.towerWidth / 2;
+    assert(Math.abs(mount[0] - wallX) < 1e-9 && mount[1] === g.anchorY, "City housing stays attached to the same moving column used in Solo and contact detection");
+  });
+}
+// Uneven browser frames produce exactly the same trial as official fixed-step scoring.
+for (const damping of [0, .25, 1]) {
+  vm.runInContext(`{ resetLab(); compareSim = null;
+    sim.tower = P.createLabTower(345, 11.5e6);
+    sim.damper = { ...P.defaultDamperFor(sim.tower), length: 10.3, massRatio: .04, damping: ${damping} };
+    sim.pulse = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, collapseSway: sim.tower.dangerSwayLimit, runDuration: 20 };
+    labTime = 0; labAccumulator = 0;
+    let frame = 0;
+    while (labTime < 20 - 1e-9 && !sim.failed) stepLive([.007, .033, .019][frame++ % 3]); }
+  `, app);
+  const live = state();
+  const scored = app.window.TMDPhysics.evaluateDesign(live.tower, live.damper, live.pulse);
+  assert.equal(scored.status, live.failed ? "failed" : "standing", "frame timing cannot change practice versus City survival");
+  assert(Math.abs(scored.overLimitTime - live.overLimitTime) < 1e-9, "practice and City danger time agree under uneven browser frames");
+  if (live.failed) {
+    assert(Math.abs(scored.failureTime - live.failedAt) < 1e-9, "practice and City fail at exactly the same simulation time");
+    assert(Math.abs(scored.samples.at(-1).theta - live.state.th) < 1e-9, "practice and City share the terminal pendulum pose");
+  }
+}
+// Exercise the real submit handler, including decimal inputs, confirmation, and errors.
+(async () => {
+  const P = app.window.TMDPhysics;
+  const student = { id: "submit-test", nickname: "Test Pair", tower: P.createLabTower(345, 11.5e6), submission: null };
+  const room = { code: "SUBMIT", phase: "design", config: { difficulty: "medium", amplitude: .62, pulseDuration: 3 }, students: [student], results: [] };
+  app.localStorage = { getItem: () => "student-token" };
+  app.sessionStorage = { getItem: () => "student-token", setItem() {} };
+  app.testRoom = room; app.testStudent = student;
+  const rosterBody = { innerHTML: '' };
+  dom.roster.querySelector = () => rosterBody;
+  vm.runInContext("currentRoom = testRoom; currentStudent = testStudent", app);
+  student.submission = { enabled: true, length: 8.4, massRatio: .06, damping: .12 };
+  room.phase = 'locked';
+  dom.submitLength.value = '12';
+  app.renderRoom();
+  assert(rosterBody.innerHTML.includes('8.40 m') && rosterBody.innerHTML.includes('6.0%') && rosterBody.innerHTML.includes('0.12'), "teacher roster displays all submitted settings");
+  assert(dom.studentTower.innerHTML.includes('Pendulum length: 8.40 m') && dom.studentTower.innerHTML.includes('Damping: 0.12'), "saved design spells out parameter names");
+  for (const id of ['submitLength', 'submitMass', 'submitDamping', 'submitDesignBtn']) assert.equal(dom[id].disabled, true, "locked room disables student controls");
+  assert.equal(dom.submitLength.value, '8.40', "locked controls show the saved design");
+  room.phase = 'design';
+  app.renderRoom();
+  for (const id of ['submitLength', 'submitMass', 'submitDamping', 'submitDesignBtn']) assert.equal(dom[id].disabled, false, "unlock re-enables student controls");
+  assert.equal(dom.submitLength.max, '17.7');
+  assert(html.includes('id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"'));
+  dom.submitLength.value = '17.8';
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert(dom.submitState.textContent.includes('17.7'), "length above 17.7 m is rejected");
+  dom.submitLength.value = "8.43"; dom.submitMass.value = "6.4"; dom.submitDamping.value = "0.17";
+  let submittedBody;
+  app.api = async (_, body) => {
+    submittedBody = body;
+    student.submission = body.submission;
+    return { student, room };
+  };
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert.equal(submittedBody.submission.length, 8.43, "arbitrary in-range lengths submit without step restrictions");
+  assert.equal(submittedBody.submission.massRatio, .064, "decimal mass percentages convert correctly");
+  assert(dom.submitState.textContent.includes("Design submitted!"), "a successful submit has visible confirmation");
+  assert.equal(dom.submitDesignBtn.disabled, false);
+  app.api = async () => { throw Error("Design window is locked"); };
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert(dom.submitState.textContent.includes("Design was not submitted: Design window is locked"), "server rejection is displayed");
+  dom.submitMass.value = "0.064";
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert.equal(dom.submitState.textContent, "Enter TMD mass from 1 to 10%.");
+  vm.runInContext("currentStudent = null", app);
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert(dom.submitState.textContent.includes("Join a challenge room"), "unjoined groups see an explanation");
+  app.localStorage = { getItem: () => "student-token", setItem() {} };
+  app.EventSource = class { close() {} };
+  dom.studentRoom.value = " submit "; dom.nickname.value = "Test Pair";
+  let joinPath;
+  app.api = async path => { joinPath = path; return { token: "student-token", student, room }; };
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  assert.equal(joinPath, "/api/rooms/SUBMIT/join", "joining trims and normalizes the room code");
+  assert(dom.studentTower.innerHTML.includes("345 m") && dom.studentTower.innerHTML.includes("11.5 million kg"), "successful browser join shows the assigned tower");
+  assert.equal(vm.runInContext("currentStudent.id", app), "submit-test");
+  app.api = async () => { throw Error("This room is locked to new groups"); };
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  assert.equal(dom.studentState.textContent, "Could not join: This room is locked to new groups", "join rejections show the exact server reason");
+  const tabStorage = (initial = []) => {
+    const data = new Map(initial);
+    return { getItem: key => data.get(key) || null, setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) };
+  };
+  const firstTab = tabStorage(), secondTab = tabStorage();
+  const identities = [];
+  app.api = async (_, body) => { identities.push(body.token); return { token: body.token, student, room }; };
+  app.sessionStorage = firstTab;
+  dom.nickname.value = 'Group A';
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  assert.equal(identities[0], identities[1], "reconnecting in the same tab retains the student identity");
+  app.sessionStorage = secondTab;
+  dom.nickname.value = 'Group B';
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  assert.notEqual(identities[0], identities[2], "two student tabs have independent identities");
+  const duplicateTab = tabStorage([['tmd-token-SUBMIT', identities[0]], ['tmd-nickname-SUBMIT', 'Group A']]);
+  app.sessionStorage = duplicateTab;
+  dom.nickname.value = 'Group C';
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  assert.equal(identities[0], identities[3], "changing a name preserves the existing student identity");
+  dom.submitMass.value = '6';
+  app.api = async (_, body) => { submittedBody = body; return { student, room }; };
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert.equal(submittedBody.token, identities[3], "submissions use this tab's token");
+  const saved = new Map([['tmd-teacher-OLDER2', 'old-key'], ['tmd-last-teacher-room', 'OLDER2']]);
+  app.localStorage = { get length() { return saved.size; }, key: i => [...saved.keys()][i], getItem: key => saved.get(key) || null, setItem: (key, value) => saved.set(key, value), removeItem: key => saved.delete(key) };
+  vm.runInContext('teacherUnlocked = true', app);
+  let createCount = 0;
+  app.api = async () => { createCount++; return { ...room, code: 'NEWER2', teacherToken: 'new-key' }; };
+  await Promise.all([app.createClassRoom(), app.createClassRoom()]);
+  assert.equal(createCount, 1, "double clicks create only one room");
+  assert(dom.teacherRooms.innerHTML.includes('OLDER2') && dom.teacherRooms.innerHTML.includes('NEWER2'), "previous room keys remain selectable");
+  dom.teacherRooms.value = 'OLDER2';
+  app.fetch = async () => ({ ok: true, json: async () => ({ ...room, code: 'OLDER2' }) });
+  await dom.openTeacherRoomBtn.listeners.click();
+  assert.equal(vm.runInContext('currentRoom.code', app), 'OLDER2', "teacher can return to a previous room");
+  assert.equal(dom.startBtn.disabled, false, "previous room retains teacher controls");
+  const removeButton = { disabled: false, dataset: { studentId: student.id } };
+  const removeEvent = { target: { closest: () => removeButton } };
+  app.window.confirm = () => false;
+  let removalRequest;
+  app.api = async (path, body) => { removalRequest = { path, body }; return { ...room, code: 'OLDER2', students: [] }; };
+  await dom.roster.listeners.click(removeEvent);
+  assert.equal(removalRequest, undefined, "canceling removal keeps the group");
+  app.window.confirm = () => true;
+  await dom.roster.listeners.click(removeEvent);
+  assert.equal(removalRequest.path, '/api/rooms/OLDER2/remove-student');
+  assert.equal(removalRequest.body.studentId, student.id);
+  assert.equal(vm.runInContext('currentRoom.students.length', app), 0, "removed group disappears from the roster");
+  app.window.confirm = () => false;
+  let deleted = false;
+  app.api = async () => { deleted = true; return { deleted: true, code: 'OLDER2' }; };
+  await dom.deleteRoomBtn.listeners.click();
+  assert.equal(deleted, false, "canceling deletion preserves the room");
+  app.window.confirm = () => true;
+  await dom.deleteRoomBtn.listeners.click();
+  assert.equal(deleted, true);
+  assert.equal(vm.runInContext('currentRoom', app), null, "deleting clears the active room");
+  assert.equal(saved.has('tmd-teacher-OLDER2'), false, "deleted room disappears from saved rooms");
+  assert.equal(saved.has('tmd-teacher-NEWER2'), true, "other saved rooms remain accessible");
+  assert.equal(dom.deleteRoomBtn.disabled, true);
+  console.log("rendering tests passed");
+})().catch(error => { console.error(error); process.exitCode = 1; });

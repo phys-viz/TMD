@@ -1,2 +1,8 @@
 server-output.log
 server-error.log
+
+node_modules/
+.wrangler/
+.dev.vars
+
+.teacher-password.txt

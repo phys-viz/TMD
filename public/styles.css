@@ -593,3 +593,69 @@ th { color: #425160; }
 .quake-countdown { margin: 16px 0 0; text-align: center; font-size: clamp(18px, 2.5vw, 25px); color: #87352a; font-weight: 800; }
 @keyframes quake-ripple { from { transform: scale(1); opacity: .95; } to { transform: scale(9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .quake-ripple { animation: none; } .ripple-two { transform: scale(4); opacity: .5; } .ripple-three { transform: scale(7); opacity: .25; } }
+
+/* Classroom pages: compact controls, readable information, restrained action colors. */
+#student, #teacher { font-size: 17px; line-height: 1.5; }
+#student .panel, #teacher .panel { padding: clamp(20px, 2vw, 30px); min-width: 0; }
+#student h2, #teacher h2 { font-size: 1.5rem; line-height: 1.25; color: #203c49; }
+#student label, #teacher label { font-size: 1rem; font-weight: 650; display: grid; gap: 6px; margin: 16px 0; color: #314b59; }
+#student input, #teacher input, #teacher select { font: inherit; font-size: 1.1rem; min-height: 46px; padding: 8px 12px; background: white; border: 1px solid #b7c9d1; border-radius: 8px; width: 100%; }
+#student input:focus, #teacher input:focus, #teacher select:focus { outline: 3px solid #b8dede; outline-offset: 2px; border-color: #0f7b7e; }
+#student input:disabled { background: #eef2f4; color: #53636e; border-color: #d1dce2; opacity: 1; }
+#student button, #teacher button { font: inherit; font-size: 1rem; font-weight: 700; min-height: 44px; padding: 9px 16px; border: 1px solid transparent; border-radius: 8px; }
+#student button:focus-visible, #teacher button:focus-visible { outline: 3px solid #426b85; outline-offset: 3px; }
+#student .muted, #teacher .muted { font-size: .96rem; line-height: 1.5; }
+.section-intro { margin: 8px 0 20px; }
+.challenge-layout { grid-template-columns: minmax(270px, 350px) minmax(0, 1fr); align-items: start; max-width: 1280px; margin: 12px auto; }
+#joinForm { border-top: 5px solid #426b85; }
+#joinForm label:first-of-type { max-width: 13ch; }
+#studentRoom { letter-spacing: .12em; text-transform: uppercase; font-weight: 750; }
+#joinForm label:nth-of-type(2) { max-width: 28ch; }
+#submitForm { border-top: 5px solid #0f7b7e; }
+#studentTower { background: #eef5f9; border-color: #c4d6e2; margin-top: 20px; padding: 18px; }
+.assignment-heading, .room-banner, .panel-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.assignment-heading > strong { font-size: 1.2rem; }
+.tower-facts { display: flex; flex-wrap: wrap; gap: 16px 40px; margin: 16px 0; }
+.tower-facts > div { display: grid; gap: 3px; }
+.tower-facts span { font-size: .92rem; color: #516777; }
+.tower-facts strong { font-size: 1.4rem; color: #203c49; }
+#studentTower p { color: #445e6e; }
+.submission-summary { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #c4d6e2; }
+.submission-summary > strong { flex-basis: 100%; color: #286248; }
+.design-fields { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0; }
+#student .design-fields label { width: 165px; }
+#submitDesignBtn { min-width: 220px; }
+.teacher-layout { grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); align-items: start; margin-top: 12px; }
+#roomForm { border-top: 5px solid #426b85; }
+#roomForm label { max-width: 28ch; }
+#roomForm label:has(input[type=number]) { max-width: 22ch; }
+#roomForm input[type=number] { max-width: 140px; }
+#teacher .strength-buttons { max-width: 340px; }
+#teacher .strength-buttons button { padding-left: 10px; padding-right: 10px; }
+#teacher .panel:has(#roster) { border-top: 5px solid #0f7b7e; }
+.room-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 20px 0 10px; }
+#teacher .room-picker label { margin: 0; width: 250px; max-width: 100%; }
+#roomState { background: #eef5f9; border-color: #c4d6e2; margin: 20px 0; padding: 18px; }
+.room-code { font-size: 1.4rem; letter-spacing: .08em; color: #203c49; }
+.room-facts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 10px; color: #4d6472; }
+#teacher .dashboard-section-title { font-size: 1.1rem; text-transform: none; letter-spacing: 0; color: #314b59; }
+.earthquake-actions { margin: 12px 0 28px; gap: 10px; }
+#teacher .button-primary { padding: 12px 22px; font-size: 1.1rem; }
+#teacher .button-secondary { background: #f0f4f6; color: #3b5362; border-color: #c6d3db; box-shadow: none; }
+#teacher .button-warning { background: #fff3dc; color: #785315; border-color: #d9b976; box-shadow: none; }
+#teacher .button-danger { background: #fff4f2; color: #a13d34; border-color: #e3bcb7; box-shadow: none; }
+.status-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: .88rem; font-weight: 700; line-height: 1.4; white-space: nowrap; }
+.status-design, .status-submitted { background: #e1f1e8; color: #286248; }
+.status-locked, .status-waiting { background: #fff1d6; color: #785315; }
+.status-running { background: #ddebf4; color: #325c7a; }
+.roster-heading { margin-bottom: 14px; padding-top: 20px; border-top: 1px solid #d8e1e6; }
+.roster-scroll { overflow-x: auto; }
+#roster { width: 100%; font-size: 1rem; margin-top: 0; }
+#roster th { background: #f0f4f6; font-size: .92rem; color: #4c6371; }
+#roster th, #roster td { padding: 14px 12px; text-align: left; white-space: nowrap; }
+#roster td:first-child { white-space: normal; min-width: 110px; }
+#teacher #roster .remove-group { font-size: .88rem; padding: 6px 10px; min-height: 36px; }
+#roster th, #roster td { display: table-cell; }
+@media (max-width: 1100px) { .teacher-layout { grid-template-columns: 1fr; } #roomForm { max-width: none; } }
+@media (max-width: 800px) { .challenge-layout { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { #student .panel, #teacher .panel { padding: 18px; } .tower-facts strong { font-size: 1.2rem; } .panel-heading { align-items: start; } }

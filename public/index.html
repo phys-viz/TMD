@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=quake-intro-22">
+  <link rel="stylesheet" href="/styles.css?v=classroom-26">
 </head>
 <body>
   <header class="topbar">
@@ -76,9 +76,9 @@
                   <h3 id="compareTmdHeading">Tower A</h3>
                   <label class="check" title="Install TMD"><input id="compareDamperEnabled" type="checkbox" aria-label="Install Tower A TMD"> TMD</label>
                   <div class="field-row three">
-                    <label>Length (m)<input id="compareLengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4" title="Length: 0.7–18 m"></label>
+                    <label>Length (m)<input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
                     <label>Mass (%)<input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <div class="damping-field"><label for="compareDampingInput">Damping</label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Tower A damping" title="0: free; resistance rises toward 1: locked"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0.45" title="0: no damping; only 1.00 locks the pendulum"></div></div>
+                    <div class="damping-field"><label for="compareDampingInput">Damping</label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower A damping" title="0: free; resistance rises toward 1: locked"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
                   </div>
                 </div>
               </div>
@@ -101,9 +101,9 @@
                   <h3 id="tmdHeading">Tower</h3>
                   <label class="check" title="Install TMD"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD" checked> TMD</label>
                   <div class="field-row three">
-                    <label>Length (m)<input id="lengthInput" type="number" min="0.7" max="18" step="0.05" value="8.4" title="Length: 0.7–18 m"></label>
+                    <label>Length (m)<input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
                     <label>Mass (%)<input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <div class="damping-field"><label for="dampingInput">Damping</label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Tower damping" title="0: free; resistance rises toward 1: locked"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0.45" title="0: no damping; only 1.00 locks the pendulum"></div></div>
+                    <div class="damping-field"><label for="dampingInput">Damping</label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower damping" title="0: free; resistance rises toward 1: locked"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
                   </div>
                 </div>
               </div>
@@ -126,29 +126,43 @@
     </section>
 
     <section id="student" class="view">
-      <div class="two-col">
+      <div class="two-col challenge-layout">
         <form id="joinForm" class="panel">
           <h2>Join Challenge</h2>
+          <p class="section-intro">Your group, your tower.</p>
           <label>Room code <input id="studentRoom" autocomplete="off" maxlength="8"></label>
-          <label>Nickname <input id="nickname" autocomplete="off" maxlength="24" value="Student"></label>
+          <label>Group name / names <input id="nickname" autocomplete="off" maxlength="24" value="Group"></label>
           <button>Join / reconnect</button>
           <p id="studentState" class="muted"></p>
         </form>
-        <form id="submitForm" class="panel">
+        <form id="submitForm" class="panel" novalidate>
           <h2>Submit Design</h2>
           <div id="studentTower" class="readout">Join a room to receive a tower.</div>
-          <label>Pendulum length (m)<input id="submitLength" type="number" min="0.7" max="18" step="0.05"></label>
-          <label>Mass ratio<input id="submitMass" type="number" min="0.01" max="0.10" step="0.005"></label>
-          <label>Damping<input id="submitDamping" type="number" min="0" max="1" step="0.01"></label>
-          <button>Submit / revise before lock</button>
+          <div class="design-fields">
+          <label>Pendulum length (m)<input id="submitLength" required type="number" min="0.7" max="17.7" step="0.05"></label>
+          <label>TMD mass (%)<input id="submitMass" required type="number" min="1" max="10" step="any"></label>
+          <label>Damping<input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
+          </div>
+          <button id="submitDesignBtn">Submit / revise before lock</button>
+          <p id="submitState" class="muted" role="status" aria-live="polite"></p>
         </form>
       </div>
     </section>
 
+    <section id="teacherLogin" class="view">
+      <form id="teacherLoginForm" class="panel" style="max-width:420px;margin:24px auto">
+        <h2>Teacher access</h2>
+        <p>Enter your teacher password to open the dashboard.</p>
+        <label>Password<input id="teacherPassword" type="password" autocomplete="current-password" maxlength="200" required></label>
+        <button>Unlock teacher controls</button>
+        <p id="teacherLoginState" class="muted" role="status"></p>
+      </form>
+    </section>
     <section id="teacher" class="view">
-      <div class="two-col">
+      <div class="two-col teacher-layout">
         <form id="roomForm" class="panel">
-          <h2>Create Room</h2>
+          <h2>Room setup</h2>
+          <p class="section-intro">Set the challenge, then invite your groups.</p>
           <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
           <label>Design minutes <input id="designMinutes" type="number" value="12" min="1" max="60"></label>
           <div id="roomStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
@@ -165,23 +179,31 @@
             </select>
           </label>
           <label>Run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
-          <label>Sway limit (m)<input id="driftLimit" type="number" value="1.2" min="0.3" max="3" step="0.05"></label>
           <div class="button-row">
-            <button>Create room</button>
-            <button id="previewClassBtn" type="button">Preview 12-pair class</button>
+            <button id="createRoomBtn">Create room</button>
+            <button id="previewClassBtn" class="button-secondary" type="button">Preview 12-pair class</button>
           </div>
           <p class="muted">Preview creates a separate room with 12 demo pairs and varied designs. Use Start earthquake to test the class.</p>
           <p id="previewState" class="muted" role="status"></p>
         </form>
         <div class="panel">
-          <h2>Teacher Controls</h2>
-          <div id="roomState" class="readout">No room yet.</div>
-          <div class="button-row">
-            <button id="lockBtn">Lock</button>
-            <button id="startBtn">Start earthquake</button>
-            <button id="replayBtn">Replay</button>
+          <div class="panel-heading"><h2>Classroom dashboard</h2>
+          <button id="teacherLogoutBtn" class="button-secondary" type="button">Lock teacher access</button></div>
+          <div class="room-picker">
+          <label>Your rooms <select id="teacherRooms"><option value="">Choose a previous room</option></select></label>
+          <button id="openTeacherRoomBtn" class="button-secondary" type="button">Open room</button>
           </div>
-          <table id="roster"><thead><tr><th>Name</th><th>Tower T</th><th>Submitted</th></tr></thead><tbody></tbody></table>
+          <p id="teacherRoomStatus" class="muted" role="status"></p>
+          <div id="roomState" class="readout">No room yet.</div>
+          <h3 class="dashboard-section-title">Earthquake controls</h3>
+          <div class="button-row earthquake-actions">
+            <button id="startBtn" class="button-primary">Start earthquake</button>
+            <button id="replayBtn" class="button-secondary">Replay</button>
+            <button id="lockBtn" class="button-warning">Lock designs</button>
+            <button id="unlockBtn" class="button-warning">Unlock for revisions</button>
+          </div>
+          <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3><button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button></div>
+          <div class="roster-scroll"><table id="roster"><thead><tr><th>Group</th><th>Tower period</th><th>Status</th><th>Pendulum length</th><th>TMD mass</th><th>Damping</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
     </section>
@@ -213,8 +235,8 @@
           <path d="M555 181L628 230H676" fill="none" stroke="#87352a" stroke-width="3"/>
           <rect x="648" y="210" width="264" height="77" rx="14" fill="#fff9e9" stroke="#87352a" stroke-width="3"/>
           <text x="780" y="242" text-anchor="middle" fill="#87352a" font-family="system-ui, sans-serif" font-size="25" font-weight="900">MORRISTOWN</text>
-          <text x="780" y="269" text-anchor="middle" fill="#9a691e" font-family="system-ui, sans-serif" font-size="17" font-weight="800">NEW JERSEY ? EPICENTER</text>
-          <text x="24" y="465" fill="#456c59" font-family="system-ui, sans-serif" font-size="14">Classroom quake ? schematic map</text>
+          <text x="780" y="269" text-anchor="middle" fill="#9a691e" font-family="system-ui, sans-serif" font-size="17" font-weight="800">NEW JERSEY · EPICENTER</text>
+          <text x="24" y="465" fill="#456c59" font-family="system-ui, sans-serif" font-size="14">Classroom quake — schematic map</text>
         </svg>
         <p id="quakeCountdown" class="quake-countdown" role="status">Brace your buildings?</p>
       </div>
@@ -226,7 +248,7 @@
     </section>
   </main>
 
-  <script src="/physics.js?v=failure-time-10"></script>
-  <script src="/app.js?v=quake-sound-25"></script>
+  <script src="/physics.js?v=shared-geometry-12"></script>
+  <script src="/app.js?v=classroom-32"></script>
 </body>
 </html>

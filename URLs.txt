@@ -1,0 +1,8 @@
+Cloudflare classroom pilot:
+https://tmd-classroom.morristown-randolph.workers.dev
+
+Local Node prototype (memory-only rooms):
+http://localhost:3000
+
+Local Cloudflare development (npm run dev):
+http://localhost:8787

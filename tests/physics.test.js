@@ -204,7 +204,8 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
   for (const dangerEnabled of [false, true]) {
     const result = P.evaluateDesign(scenario, damper, { ...strong, dangerEnabled });
     assert.strictEqual(result.status, "failed", "the first wall hit fails official scoring even on Easy");
-    assert.strictEqual(result.hits, 1, "official simulation stops at one physical hit");
+    if (!dangerEnabled) assert.strictEqual(result.hits, 1, "Easy stops at the first physical hit");
+    else assert(result.hits === 1 || P.dangerLimitReached(result.overLimitTime, strong), "danger-enabled scoring stops at the first collision or danger failure");
     assert(result.samples[result.samples.length - 1].t < strong.runDuration, "the impact ends the design's observation run");
     close(result.heat, 0, 1e-9, "the terminal hit is not counted as hydraulic heat");
   }
@@ -326,5 +327,27 @@ function contactAngle(tower, damper, side, sway = 0) {
   const failed = P.evaluateDesign(scenario, { enabled: false }, { ...P.defaultPulse(), runDuration: 20 });
   assert.equal(failed.status, "failed");
   assert(failed.failureTime > 3 && failed.failureTime < 20, "danger failure records its actual time rather than the end of the trial");
+}
+{
+  // Live practice and official scoring use the same advanceTrial rules and physics.
+  const scenario = P.generateChallengeTower("practice-city-parity", 0);
+  for (const dangerEnabled of [false, true]) for (const damping of [0, .25, 1]) {
+    const pulse = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, dangerEnabled, collapseSway: scenario.dangerSwayLimit, runDuration: 20 };
+    const design = { ...P.defaultDamperFor(scenario), massRatio: .04, damping };
+    const scored = P.evaluateDesign(scenario, design, pulse);
+    const applied = { ...pulse, collapseSway: scenario.dangerSwayLimit };
+    let state = P.initialState(), dangerTime = 0, trial;
+    while (state.t < pulse.runDuration - 1e-9) {
+      trial = P.advanceTrial(state, Math.min(P.trialStep, pulse.runDuration - state.t), scenario, design, applied, dangerTime);
+      state = trial.state; dangerTime = trial.overLimitTime;
+      if (trial.failed) break;
+    }
+    assert.equal(scored.status, trial.failed ? "failed" : "standing", "identical designs have the same result in practice and City");
+    close(scored.overLimitTime, dangerTime, 1e-9, "practice and City accumulate the same danger time");
+    if (trial.failed) {
+      close(scored.failureTime, state.t, 1e-9, "practice and City fail at the same moment");
+      close(scored.samples.at(-1).sway, trial.sample.sway, 1e-9, "City retains the same terminal pose");
+    }
+  }
 }
 console.log("physics tests passed");

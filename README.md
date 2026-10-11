@@ -6,7 +6,7 @@ The project also includes an early teacher/student/city challenge mode, but the 
 
 ## Run Locally
 
-Requires Node.js 18 or newer.
+Requires Node.js 22 or newer.
 
 ```bash
 npm.cmd start
@@ -70,7 +70,7 @@ The pendulum TMD is coupled to the building motion and integrated numerically in
 k = M * (2*pi/T)^2
 ```
 
-For editable solo towers, define `q = sqrt((H/170 m) * (M/7.5 million kg))` and `q_max = sqrt((350/170) * (15/7.5))`. Assign `T = 4.8 s + 2.2 s * (q - 1)/(q_max - 1)` and a fixed building damping ratio of 0.005 (0.5% of critical damping). This is a classroom calibration that makes both dimensions matter while keeping stopwatch measurements practical, not a real skyscraper period formula. The classroom challenge continues to assign towers deterministically from the teacher's scenario seed.
+For editable solo towers, define `q = sqrt((H/170 m) * (M/7.5 million kg))` and `q_max = sqrt((350/170) * (15/7.5))`. Assign `T = 4.8 s + 2.2 s * (q - 1)/(q_max - 1)` and a fixed building damping ratio of 0.005 (0.5% of critical damping). This is a classroom calibration that makes both dimensions matter while keeping stopwatch measurements practical, not a real skyscraper period formula. The classroom challenge assigns random whole-meter heights and masses rounded to 0.1 million kg from the teacher's scenario seed. Assigned towers use this same Solo Lab calibration, so entering their dimensions recreates identical physics. The Student tab hides period and calculated length, starts length and mass fields blank and damping at zero, and asks pairs to investigate in Solo Lab before submitting. Reconnecting preserves the assignment and restores only their own submitted settings. Pairs without a submission are tested without a TMD.
 
 Students calculate tuned pendulum length from:
 
@@ -146,3 +146,11 @@ Then open `http://localhost:3000`.
 The solo lab can be converted into a static-only version if needed.
 
 The current full prototype uses `server.js` for teacher/student rooms, in-memory room state, and live updates. That works locally as a Node app. For production hosting, use a Node-friendly host or port the room logic to the hosting platform's serverless/state model.
+
+Solo and comparison testing start at damping 0. New challenge submissions also start at 0; reconnecting retains the group's submitted damping. City labels display the entered group name in full (up to 24 characters), fitted beneath its tower.
+
+## Cloudflare hosting
+
+See [HOSTING.md](HOSTING.md) for deployment and the classroom pilot. `npm run dev` runs the Cloudflare Worker locally; `npm run deploy:check` checks the build without publishing; `npm run deploy` publishes the Worker and assets. Persistent rooms expire after 24 hours. Teacher actions require the creator's private browser key.
+
+City scales the complete canonical Solo tower scene, including columns, pendulum, mounts, and collision geometry. Solo practice and official scoring share the same advanceTrial integration and danger/collision rules; scoring ends at the first failure and preserves its contact pose.

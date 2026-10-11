@@ -6,11 +6,14 @@ let labTower = P.createLabTower(Number($("towerHeightInput").value), Number($("t
 let sim = null;
 let compareSim = null;
 let labTime = 0;
+let labAccumulator = 0;
 let labPaused = false;
 let comparisonInitialized = false;
 let currentRoom = null;
 let currentStudent = null;
 let events = null;
+let teacherUnlocked = false;
+let creatingRoom = false;
 let cityStart = 0;
 let lastCityStartedAt = 0;
 let quakeAudio = null;
@@ -104,8 +107,10 @@ function graphRange(comparison = false) {
 }
 
 function setView(view) {
+  const requested = view;
+  if (view === "teacher" && !teacherUnlocked) view = "teacherLogin";
   document.querySelectorAll(".view").forEach(el => el.classList.toggle("active", el.id === view));
-  document.querySelectorAll(".tab").forEach(el => el.classList.toggle("active", el.dataset.view === view));
+  document.querySelectorAll(".tab").forEach(el => el.classList.toggle("active", el.dataset.view === requested));
 }
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => setView(btn.dataset.view)));
 
@@ -153,7 +158,7 @@ function damperFromLab(comparison = false) {
     enabled: $(ids[0]).checked,
     length: inputNumber(ids[1], 8.4),
     massRatio: inputNumber(ids[2], 3.5) / 100,
-    damping: inputNumber(ids[3], 0.45),
+    damping: inputNumber(ids[3], 0),
     wallLimit: 2.7,
     restitution: 0.28,
     bobRadius: 0.3
@@ -190,6 +195,7 @@ function makeSim() {
   sim = makeRun(damperFromLab(), pulse, baseline);
   compareSim = $("compareEnabled").checked ? makeRun(damperFromLab(true), pulse, baseline) : null;
   labTime = 0;
+  labAccumulator = 0;
   labPaused = false;
 }
 
@@ -224,19 +230,18 @@ function appendSample(run) {
 
 function stepRun(run, dt) {
   if (run.failed) return;
-  const previousT = run.state.t;
   const oldHeat = run.state.heat || 0;
   const oldHits = run.state.hits || 0;
-  run.state = P.stepSimulation(run.state, dt, run.tower, run.damper, run.pulse);
+  const trial = P.advanceTrial(run.state, dt, run.tower, run.damper, run.pulse, run.overLimitTime);
+  run.state = trial.state;
   if ((run.state.heat || 0) < oldHeat) run.state.heat = oldHeat;
-  const sample = P.sampleState(run.state, run.tower, run.damper, run.pulse);
+  const sample = trial.sample;
   if (sample.hits > oldHits) run.hitFlash = 0.6;
-  const dangerDt = Math.max(0, run.state.t - Math.max(previousT, run.pulse.duration));
-  if (run.pulse.dangerEnabled !== false && Math.abs(sample.sway) > run.pulse.collapseSway) run.overLimitTime += dangerDt;
-  if (sample.hits > 0 || P.dangerLimitReached(run.overLimitTime, run.pulse)) {
+  run.overLimitTime = trial.overLimitTime;
+  if (trial.failed) {
     run.failed = true;
     run.failedAt = run.state.t;
-    run.failureCause = sample.hits > 0 ? "Collision — failed" : "Danger limit — failed";
+    run.failureCause = trial.failureCause;
     appendSample(run);
     return;
   }
@@ -248,10 +253,13 @@ function stepRun(run, dt) {
 }
 
 function stepLive(dt) {
-  const step = Math.min(Math.max(0, dt), sim.pulse.runDuration - labTime);
-  if (step > 0) {
+  labAccumulator += Math.max(0, dt);
+  while (labTime < sim.pulse.runDuration - 1e-9 && !labRuns().every(run => run.failed)) {
+    const step = Math.min(P.trialStep, sim.pulse.runDuration - labTime);
+    if (labAccumulator + 1e-9 < step) break;
     labRuns().forEach(run => stepRun(run, step));
     labTime += step;
+    labAccumulator = Math.max(0, labAccumulator - step);
   }
   if (labTime >= sim.pulse.runDuration - 1e-9 || labRuns().every(run => run.failed)) sim.playing = false;
 }
@@ -275,8 +283,9 @@ function drawHydraulicDamper(ctx, anchorX, anchorY, bobX, bobY, bobR, side, warm
   const uy = dy / dist;
   const mountDepth = 14;
   const cylinderLen = HYDRAULIC_BODY_PX; // Rigid housing; only the piston rod changes length.
-  const rodEndX = bobX - ux * (bobR + 3);
-  const rodEndY = bobY - uy * (bobR + 3);
+  // Draw behind the bob to its center so the joint stays connected at every display scale.
+  const rodEndX = bobX;
+  const rodEndY = bobY;
   const cylinderEndX = anchorX + ux * cylinderLen;
   const cylinderEndY = anchorY + uy * cylinderLen;
 
@@ -315,8 +324,8 @@ function drawLockBrace(ctx, anchorX, anchorY, bobX, bobY, bobR) {
   const dist = Math.max(1, Math.hypot(dx, dy));
   const ux = dx / dist;
   const uy = dy / dist;
-  const endX = bobX - ux * (bobR + 4);
-  const endY = bobY - uy * (bobR + 4);
+  const endX = bobX;
+  const endY = bobY;
 
   ctx.save();
   ctx.lineCap = "round";
@@ -397,18 +406,11 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
-  const scale = 44 * 3;
+  const layout = P.towerGeometry(run.tower);
+  const scale = layout.swayScale;
   const baseX = w / 2 + sample.y * scale;
-  const rawRoofX = baseX + sample.sway * scale;
-  const roofX = rawRoofX;
-  const bottom = h - 44;
-  const heightFraction = P.clamp((run.tower.height - P.labTowerLimits.minHeight) /
-    (P.labTowerLimits.maxHeight - P.labTowerLimits.minHeight), 0, 1);
-  const massFraction = P.clamp((run.tower.mass - P.labTowerLimits.minMass) /
-    (P.labTowerLimits.maxMass - P.labTowerLimits.minMass), 0, 1);
-  const top = 118 - 60 * heightFraction;
-  const columnWidth = 4 + 4 * massFraction;
-  const towerWidth = 216;
+  const roofX = baseX + sample.sway * scale;
+  const { bottom, top, columnWidth, towerWidth } = layout;
   const d = run.damper;
 
   if (options.background !== false) {
@@ -606,8 +608,13 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(248, 251, 252, .95)";
     ctx.lineWidth = 7;
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(1, options.bobAspect || 1);
+    ctx.translate(-w / 2, -h / 2);
     ctx.strokeText("FAILED", w / 2, h / 2);
     ctx.fillText("FAILED", w / 2, h / 2);
+    ctx.restore();
     ctx.restore();
     return;
   }
@@ -664,6 +671,11 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
       }
     }
 
+    // Keep the bob round when the city stretches the building vertically.
+    ctx.save();
+    ctx.translate(bobX, bobY);
+    ctx.scale(1, options.bobAspect || 1);
+    ctx.translate(-bobX, -bobY);
     const bobGradient = ctx.createRadialGradient(bobX - bobR * 0.35, bobY - bobR * 0.45, bobR * 0.2, bobX, bobY, bobR);
     bobGradient.addColorStop(0, "#f2c46d");
     bobGradient.addColorStop(0.68, "#9b6b18");
@@ -676,6 +688,7 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     ctx.arc(bobX, bobY, bobR, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowColor = "transparent";
+    ctx.restore();
     if (showContact) {
       const contact = run.state.contact;
       const contactX = pivotX + contact.x, contactY = contact.y;
@@ -901,7 +914,11 @@ function animateLab(now) {
 }
 
 async function api(path, body) {
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const headers = { "Content-Type": "application/json" };
+  const code = path.match(/^\/api\/rooms\/([^/]+)/)?.[1];
+  const teacherToken = code && typeof localStorage !== "undefined" ? localStorage.getItem(`tmd-teacher-${code}`) : null;
+  if (teacherToken) headers["X-Teacher-Token"] = teacherToken;
+  const res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body || {}) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
@@ -911,10 +928,40 @@ function connectRoom(code) {
   if (events) events.close();
   events = new EventSource(`/events/${code}`);
   events.onmessage = event => {
-    currentRoom = JSON.parse(event.data);
+    const room = JSON.parse(event.data);
+    if (room.deleted) { clearDeletedRoom(room.code); return; }
+    currentRoom = room;
     renderRoom();
     renderCity();
   };
+}
+
+function clearDeletedRoom(code) {
+  localStorage.removeItem(`tmd-teacher-${code}`);
+  if (localStorage.getItem("tmd-last-teacher-room") === code) localStorage.removeItem("tmd-last-teacher-room");
+  sessionStorage.removeItem(`tmd-token-${code}`);
+  sessionStorage.removeItem(`tmd-nickname-${code}`);
+  if (currentRoom?.code === code) {
+    events?.close();
+    events = null;
+    currentRoom = null;
+    currentStudent = null;
+    stopQuakeSound();
+    $("roomState").textContent = "Room deleted. Create or open another room.";
+    $("studentState").textContent = "This room was deleted by the teacher.";
+    $("studentTower").textContent = "Join a room to receive a tower.";
+    $("submitState").textContent = "";
+    $("roster").querySelector("tbody").innerHTML = "";
+    $("resultsTable").querySelector("tbody").innerHTML = "";
+    $("quakeIntro").hidden = true;
+    $("cityCanvas").hidden = false;
+    $("cityResults").hidden = true;
+    $("cityCaption").textContent = "Create or join a room to see the shared skyline.";
+    $("quakeBadge").textContent = "Waiting";
+    ["lockBtn", "unlockBtn", "startBtn", "replayBtn", "deleteRoomBtn"].forEach(id => { $(id).disabled = true; });
+    renderCity();
+  }
+  renderTeacherRooms();
 }
 
 function escapeHtml(str) {
@@ -923,22 +970,40 @@ function escapeHtml(str) {
 
 function renderRoom() {
   if (!currentRoom) return;
+  const teacher = teacherUnlocked && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
+  ["lockBtn", "unlockBtn", "startBtn", "replayBtn", "deleteRoomBtn"].forEach(id => { $(id).disabled = !teacher; });
+  $("lockBtn").disabled = !teacher || currentRoom.phase !== "design";
+  $("unlockBtn").disabled = !teacher || currentRoom.phase === "design";
+  renderTeacherRooms();
   const roomMode = DIFFICULTY[currentRoom.config.difficulty]?.label || "Medium";
-  $("roomState").innerHTML = `<strong>Room ${currentRoom.code}</strong><br>Phase: ${currentRoom.phase}${currentRoom.preview ? " (demo class)" : ""}<br>Mode: ${roomMode}<br>Earthquake: ${fmt(currentRoom.config.amplitude)} m for ${fmt(currentRoom.config.pulseDuration)} s<br>Students: ${currentRoom.students.length}`;
-  $("studentState").textContent = `Room ${currentRoom.code}: ${currentRoom.phase}`;
-  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td>${escapeHtml(s.nickname)}</td><td>${fmt(s.tower.period)} s</td><td>${s.submission ? "yes" : "no"}</td></tr>`).join("");
+  const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[currentRoom.phase] || currentRoom.phase;
+  $("roomState").innerHTML = `<div class="room-banner"><strong>Room <span class="room-code">${escapeHtml(currentRoom.code)}</span></strong><span class="status-chip status-${currentRoom.phase}">${escapeHtml(phaseLabel)}</span></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
+  $("studentState").textContent = `Room ${currentRoom.code} · ${phaseLabel}`;
+  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td>${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-waiting"}">${s.submission ? "Submitted" : "Waiting"}</span></td><td>${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td>${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td>${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="button-danger remove-group" data-student-id="${escapeHtml(s.id)}" ${teacher ? "" : "disabled"}>Remove group</button></td></tr>`).join("");
+  const wasLocked = $("submitLength").disabled;
+  const locked = currentRoom.phase !== "design" || !currentStudent;
+  ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = locked; });
   if (!currentStudent) return;
   const latest = currentRoom.students.find(s => s.id === currentStudent.id);
-  if (!latest) return;
-  currentStudent = latest;
-  const tuned = P.g * Math.pow(latest.tower.period / (2 * Math.PI), 2);
-  $("studentTower").innerHTML = `<strong>${escapeHtml(latest.tower.name)}</strong><br>Height ${latest.tower.height} m; mass ${(latest.tower.mass / 1e6).toFixed(1)} million kg<br>Natural period ${fmt(latest.tower.period)} s; calculated length ${fmt(tuned)} m<br>Game sway limit ${fmt(latest.tower.dangerSwayLimit ?? DANGER_SWAY)} m<br>Submission: ${latest.submission ? `L ${fmt(latest.submission.length)} m, D ${fmt(latest.submission.damping)}` : "not submitted"}`;
-  if (!$("submitLength").value) {
-    const d = P.defaultDamperFor(latest.tower);
-    $("submitLength").value = fmt(d.length);
-    $("submitMass").value = fmt(d.massRatio, 3);
-    $("submitDamping").value = fmt(d.damping, 2);
+  if (!latest) {
+    currentStudent = null;
+    sessionStorage.removeItem(`tmd-token-${currentRoom.code}`);
+    ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = true; });
+    $("studentTower").textContent = "Your group was removed from this room by the teacher.";
+    $("submitState").textContent = "";
+    return;
   }
+  currentStudent = latest;
+  if (locked) {
+    $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "";
+    $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100, 1) : "";
+    $("submitDamping").value = latest.submission ? fmt(latest.submission.damping) : "0";
+    $("submitState").textContent = "Room locked. Your submitted design is fixed until the teacher unlocks it.";
+  } else if (wasLocked) {
+    $("submitState").textContent = "Room reopened. Change your settings and click Submit / revise to save them for the next earthquake.";
+  }
+  $("studentTower").innerHTML = `<div class="assignment-heading"><strong>${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-waiting"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in Solo Lab. Measure the period and tune your TMD, then submit your settings here.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
+
 }
 
 function renderCity() {
@@ -952,8 +1017,9 @@ function renderCity() {
   ctx.fillStyle = "#cad7dd";
   ctx.fillRect(0, h - 46, w, 46);
   if (!currentRoom) return;
-  const students = currentRoom.students.slice(0, 24);
+  const students = currentRoom.students.slice(0, 12);
   const pulse = currentRoom.quake;
+  if (!pulse) lastCityStartedAt = 0;
   if (pulse?.startedAt && currentRoom.phase === "running" && pulse.startedAt !== lastCityStartedAt) {
     cityStart = performance.now() - (Date.now() - pulse.startedAt);
     lastCityStartedAt = pulse.startedAt;
@@ -969,14 +1035,14 @@ function renderCity() {
   $("cityResults").hidden = running && (intro || t < (pulse.runDuration || RUN_DURATION) + 3.6);
   if (intro) {
     playQuakeWarning(pulse.startedAt);
-    $("quakeCountdown").textContent = `Brace your buildings? skyline in ${Math.ceil(remaining)}!`;
+    $("quakeCountdown").textContent = `Brace your buildings — skyline in ${Math.ceil(remaining)}!`;
     $("quakeBadge").textContent = "Epicenter: Morristown, NJ";
     $("cityCaption").textContent = "Incoming classroom quake!";
     return;
   }
   if (running) {
     const finished = t >= (pulse.runDuration || RUN_DURATION) + 3.6;
-    $("quakeBadge").textContent = finished ? "Aftermath" : t < pulse.duration ? "Ground shaking!" : "Ground stopped ? settling";
+    $("quakeBadge").textContent = finished ? "Aftermath" : t < pulse.duration ? "Ground shaking!" : "Ground stopped — settling";
     $("cityCaption").textContent = `Room ${currentRoom.code}: ${finished ? "the dust has settled." : t < pulse.duration ? "Hold on! The earthquake has reached the city." : "Watch which designs survive."}`;
   }
   const aftermath = running && t >= (pulse.runDuration || RUN_DURATION) + 3.6;
@@ -985,35 +1051,38 @@ function renderCity() {
     const result = s.result;
     const sampleTime = result?.failureTime != null ? Math.min(t, result.failureTime) : t;
     const idx = result?.samples?.length ? Math.min(result.samples.length - 1, Math.floor(sampleTime / 0.05)) : 0;
-    const sample = result?.samples?.[idx] || { t: 0, y: 0, sway: 0, theta: 0, heat: 0 };
+    const terminal = result?.samples?.at(-1);
+    const terminalPose = result?.status === "failed" && t >= result.failureTime && terminal && Math.abs(terminal.t - result.failureTime) < 1e-6;
+    const sample = (terminalPose ? terminal : result?.samples?.[idx]) || { t: 0, y: 0, sway: 0, theta: 0, heat: 0 };
     const cx = cell * i + cell / 2;
     const fraction = P.clamp((s.tower.height - 170) / 180, 0, 1);
     const height = 180 + fraction * 160;
     const towerScale = Math.min(0.3, cell / 420);
-    const virtualHeight = height / towerScale + (118 - 60 * fraction) + 44;
+    const layout = P.towerGeometry(s.tower);
+    const verticalScale = height / (layout.bottom - layout.top);
     const failureTime = result?.failureTime ?? result?.samples?.at(-1)?.t ?? Infinity;
     const failed = result?.status === "failed" && (aftermath || t >= failureTime);
     const run = {
       tower: s.tower,
       damper: s.submission || { enabled: false },
       pulse: pulse || { dangerEnabled: false },
-      state: {},
+      state: { contact: result?.contact || null },
       failed,
       collapseAge: failed ? (aftermath ? 3.6 : Math.max(0, t - failureTime)) : 0,
       energyScale: Math.max(4000, s.tower.mass * 0.0012)
     };
     ctx.save();
-    ctx.translate(cx - 210 * towerScale, h - 48 - (virtualHeight - 44) * towerScale);
-    ctx.scale(towerScale, towerScale);
-    drawStage(sample, run, { width: 420, height: virtualHeight, getContext: () => ctx }, { background: false, danger: false });
+    ctx.translate(cx - layout.width / 2 * towerScale, h - 48 - layout.bottom * verticalScale);
+    ctx.scale(towerScale, verticalScale);
+    drawStage(sample, run, { width: layout.width, height: layout.height, getContext: () => ctx }, { background: false, danger: false, bobAspect: towerScale / verticalScale });
     ctx.restore();
     ctx.fillStyle = "#17212b";
     ctx.font = "12px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText(s.nickname.slice(0, 12), cx, h - 14);
+    ctx.fillText(s.nickname, cx, h - 14, Math.max(1, cell - 8));
   });
 
-  $("resultsTable").querySelector("tbody").innerHTML = (currentRoom.results || []).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.nickname)}</td><td>${r.result.status}</td><td>${fmt(r.result.settleTime, 2)} s</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}</td></tr>`).join("");
+  $("resultsTable").querySelector("tbody").innerHTML = (currentRoom.results || []).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.nickname)}</td><td>${r.result.status}</td><td>${fmt(r.result.settleTime, 2)} s</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>${r.submission?.enabled ? `L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}` : "No TMD"}</td></tr>`).join("");
 }
 
 function animateCity() {
@@ -1116,6 +1185,11 @@ $("randomTowerBtn").addEventListener("click", () => {
 });
 
 async function createClassRoom(preview = false) {
+  if (creatingRoom) return;
+  creatingRoom = true;
+  $("createRoomBtn").disabled = true;
+  $("previewClassBtn").disabled = true;
+  try {
   currentRoom = await api("/api/rooms", {
     preview,
     seed: $("roomSeed").value,
@@ -1124,18 +1198,58 @@ async function createClassRoom(preview = false) {
     pulseDuration: EARTHQUAKE_DURATION,
     difficulty: $("roomDifficulty").value,
     runDuration: Number($("roomRunDuration").value),
-    driftLimit: Number($("driftLimit").value)
+    driftLimit: 1.2
   });
+  localStorage.setItem(`tmd-teacher-${currentRoom.code}`, currentRoom.teacherToken);
+  localStorage.setItem("tmd-last-teacher-room", currentRoom.code);
+  delete currentRoom.teacherToken;
   connectRoom(currentRoom.code);
   currentStudent = null;
   renderRoom();
   renderCity();
   setView("teacher");
+  } finally {
+    creatingRoom = false;
+    $("createRoomBtn").disabled = false;
+    $("previewClassBtn").disabled = false;
+  }
 }
+
+function renderTeacherRooms() {
+  if (typeof localStorage === "undefined") return;
+  const codes = new Set();
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith("tmd-teacher-")) codes.add(key.slice("tmd-teacher-".length));
+  }
+  const last = localStorage.getItem("tmd-last-teacher-room");
+  if (last) codes.add(last);
+  if (currentRoom && localStorage.getItem(`tmd-teacher-${currentRoom.code}`)) codes.add(currentRoom.code);
+  $("teacherRooms").innerHTML = '<option value="">Choose a previous room</option>' + Array.from(codes).sort().map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join("");
+  if (codes.has(currentRoom?.code)) $("teacherRooms").value = currentRoom.code;
+}
+
+$("openTeacherRoomBtn").addEventListener("click", async () => {
+  const code = $("teacherRooms").value;
+  if (!code) return;
+  try {
+    const response = await fetch(`/api/rooms/${code}`);
+    const room = await response.json();
+    if (!response.ok) throw new Error(room.error || "Could not open room");
+    currentRoom = room;
+    currentStudent = null;
+    localStorage.setItem("tmd-last-teacher-room", code);
+    connectRoom(code);
+    renderRoom();
+    renderCity();
+    $("teacherRoomStatus").textContent = "";
+  } catch (error) { $("teacherRoomStatus").textContent = error.message; }
+});
 
 $("roomForm").addEventListener("submit", async event => {
   event.preventDefault();
-  await createClassRoom();
+  try { await createClassRoom(); }
+  catch (error) { $("previewState").textContent = error.message; }
 });
 $("previewClassBtn").addEventListener("click", async () => {
   $("previewClassBtn").disabled = true;
@@ -1154,55 +1268,139 @@ $("joinForm").addEventListener("submit", async event => {
   event.preventDefault();
   const code = $("studentRoom").value.trim().toUpperCase();
   const key = `tmd-token-${code}`;
-  const token = localStorage.getItem(key) || P.makeId("tok");
-  const data = await api(`/api/rooms/${code}/join`, { nickname: $("nickname").value, token });
-  localStorage.setItem(key, data.token);
-  currentStudent = data.student;
-  currentRoom = data.room;
-  connectRoom(code);
-  renderRoom();
+  const nickname = $("nickname").value.trim();
+  // The token identifies the group; its display name can change independently.
+  const token = sessionStorage.getItem(key) || P.makeId("tok");
+  $("studentState").textContent = "Joining room...";
+  try {
+    const data = await api(`/api/rooms/${code}/join`, { nickname, token });
+    sessionStorage.setItem(key, data.token);
+    currentStudent = data.student;
+    // New assignments start blank; reconnecting restores only the pair's own submission.
+    $("submitLength").value = data.student.submission ? fmt(data.student.submission.length) : "";
+    $("submitMass").value = data.student.submission ? fmt(data.student.submission.massRatio * 100, 1) : "";
+    $("submitDamping").value = data.student.submission ? fmt(data.student.submission.damping) : "0";
+    currentRoom = data.room;
+    connectRoom(code);
+    renderRoom();
+    $("submitState").textContent = data.student.submission ? "Your saved design is restored. You can revise it before the room is locked." : "Enter your tested settings, then submit your design.";
+  } catch (error) {
+    currentStudent = null;
+    $("studentState").textContent = `Could not join: ${error.message}`;
+    $("studentTower").textContent = "Join a room to receive a tower.";
+  }
+
 });
 
 $("submitForm").addEventListener("submit", async event => {
   event.preventDefault();
-  if (!currentRoom || !currentStudent) return;
-  const data = await api(`/api/rooms/${currentRoom.code}/submit`, {
-    token: localStorage.getItem(`tmd-token-${currentRoom.code}`),
-    submission: {
-      enabled: true,
-      length: Number($("submitLength").value),
-      massRatio: Number($("submitMass").value),
-      damping: Number($("submitDamping").value),
-      wallLimit: 2.7
+  const status = $("submitState");
+  if (!currentRoom || !currentStudent) {
+    status.textContent = "Join a challenge room before submitting your design.";
+    return;
+  }
+  if (currentRoom.phase !== "design") {
+    status.textContent = "This room is locked. Designs cannot be submitted or revised after the teacher locks or starts it.";
+    return;
+  }
+  const fields = [
+    ["submitLength", .7, 17.7, "Enter a pendulum length from 0.7 to 17.7 m."],
+    ["submitMass", 1, 10, "Enter TMD mass from 1 to 10%."],
+    ["submitDamping", 0, 1, "Enter damping from 0 to 1."]
+  ];
+  for (const [id, min, max, message] of fields) {
+    const value = Number($(id).value);
+    if ($(id).value.trim() === "" || !Number.isFinite(value) || value < min || value > max) {
+      status.textContent = message;
+      $(id).focus?.();
+      return;
     }
-  });
-  currentRoom = data.room;
-  renderRoom();
+  }
+  $("submitDesignBtn").disabled = true;
+  status.textContent = "Submitting your design...";
+  try {
+    const data = await api(`/api/rooms/${currentRoom.code}/submit`, {
+      token: sessionStorage.getItem(`tmd-token-${currentRoom.code}`),
+      submission: {
+        enabled: true,
+        length: Number($("submitLength").value),
+        massRatio: Number($("submitMass").value) / 100,
+        damping: Number($("submitDamping").value),
+        wallLimit: 2.7
+      }
+    });
+    currentRoom = data.room;
+    currentStudent = data.student;
+    renderRoom();
+    status.textContent = "Design submitted! Your teacher can see it. You can revise it until the room is locked.";
+  } catch (error) {
+    status.textContent = `Design was not submitted: ${error.message}`;
+  } finally {
+    $("submitDesignBtn").disabled = currentRoom?.phase !== "design";
+  }
 });
 
 $("lockBtn").addEventListener("click", async () => {
   if (!currentRoom) return;
-  currentRoom = await api(`/api/rooms/${currentRoom.code}/lock`);
-  renderRoom();
+  try {
+    currentRoom = await api(`/api/rooms/${currentRoom.code}/lock`);
+    renderRoom();
+    $("teacherRoomStatus").textContent = "Designs locked.";
+  } catch (error) { $("teacherRoomStatus").textContent = error.message; }
 });
-$("startBtn").addEventListener("click", async () => {
+$("unlockBtn").addEventListener("click", async () => {
+  if (!currentRoom) return;
+  try {
+    currentRoom = await api(`/api/rooms/${currentRoom.code}/unlock`);
+    stopQuakeSound();
+    renderRoom();
+    renderCity();
+    $("teacherRoomStatus").textContent = "Room reopened. Groups can join and revise their designs.";
+  } catch (error) { $("teacherRoomStatus").textContent = error.message; }
+});
+$("deleteRoomBtn").addEventListener("click", async () => {
+  if (!currentRoom || !teacherUnlocked) return;
+  const code = currentRoom.code;
+  if (!window.confirm(`Delete room ${code} and all its student designs and results? This cannot be undone.`)) return;
+  $("deleteRoomBtn").disabled = true;
+  try {
+    await api(`/api/rooms/${code}/delete`);
+    clearDeletedRoom(code);
+    $("teacherRoomStatus").textContent = `Room ${code} deleted.`;
+  } catch (error) {
+    $("teacherRoomStatus").textContent = error.message;
+    renderRoom();
+  }
+});
+$("roster").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-student-id]");
+  if (!button || button.disabled || !teacherUnlocked || !currentRoom) return;
+  const student = currentRoom.students.find(s => s.id === button.dataset.studentId);
+  if (!student || !window.confirm(`Remove ${student.nickname} from room ${currentRoom.code}? Their tower, submitted design, and results will be deleted.`)) return;
+  button.disabled = true;
+  try {
+    currentRoom = await api(`/api/rooms/${currentRoom.code}/remove-student`, { studentId: student.id });
+    renderRoom();
+    renderCity();
+    $("teacherRoomStatus").textContent = `${student.nickname} removed.`;
+  } catch (error) { $("teacherRoomStatus").textContent = error.message; button.disabled = false; }
+});
+async function runQuake(action) {
   if (!currentRoom) return;
   prepareQuakeAudio();
-  currentRoom = await api(`/api/rooms/${currentRoom.code}/start`);
+  try {
+    currentRoom = await api(`/api/rooms/${currentRoom.code}/${action}`);
+  } catch (error) {
+    $("teacherRoomStatus").textContent = error.message;
+    return;
+  }
   cityStart = currentRoom.quake?.startedAt ? performance.now() - (Date.now() - currentRoom.quake.startedAt) : performance.now();
   setView("city");
   renderRoom();
   renderCity();
-});
-$("replayBtn").addEventListener("click", async () => {
-  if (!currentRoom) return;
-  prepareQuakeAudio();
-  currentRoom = await api(`/api/rooms/${currentRoom.code}/replay`);
-  cityStart = currentRoom.quake?.startedAt ? performance.now() - (Date.now() - currentRoom.quake.startedAt) : performance.now();
-  setView("city");
-  renderRoom();
-  renderCity();
-});
+}
+$("startBtn").addEventListener("click", () => runQuake("start"));
+$("replayBtn").addEventListener("click", () => runQuake("replay"));
 
 $("quakeSoundBtn").addEventListener("click", () => {
   quakeSoundEnabled = !quakeSoundEnabled;
@@ -1219,3 +1417,46 @@ updateLabels();
 resetLab();
 requestAnimationFrame(animateLab);
 animateCity();
+
+// Restore the teacher's last room after a refresh; the private key stays on this browser.
+renderTeacherRooms();
+if (typeof localStorage !== "undefined") {
+  const savedCode = localStorage.getItem("tmd-last-teacher-room");
+  if (savedCode && localStorage.getItem(`tmd-teacher-${savedCode}`)) {
+    fetch(`/api/rooms/${savedCode}`).then(res => res.ok ? res.json() : null).then(room => {
+      if (!room || currentRoom) return;
+      currentRoom = room;
+      connectRoom(room.code);
+      renderRoom();
+      renderCity();
+    }).catch(() => {});
+  }
+}
+
+$("teacherLoginForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("teacherLoginState").textContent = "Checking password...";
+  try {
+    await api("/api/teacher/login", { password: $("teacherPassword").value });
+    $("teacherPassword").value = "";
+    $("teacherLoginState").textContent = "";
+    teacherUnlocked = true;
+    setView("teacher");
+    renderRoom();
+  } catch (error) {
+    $("teacherLoginState").textContent = error.message;
+  }
+});
+$("teacherLogoutBtn").addEventListener("click", async () => {
+  await api("/api/teacher/logout");
+  teacherUnlocked = false;
+  $("teacherPassword").value = "";
+  setView("teacher");
+  renderRoom();
+});
+if (typeof fetch !== "undefined") {
+  fetch("/api/teacher/session").then(res => res.json()).then(data => {
+    teacherUnlocked = data.teacher === true;
+    renderRoom();
+  }).catch(() => {});
+}
