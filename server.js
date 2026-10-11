@@ -7,7 +7,7 @@ const physics = require("./public/physics.js");
 const publicDir = path.join(__dirname, "public");
 const rooms = new Map();
 
-const { maxGroups, createRoom, publicRoom, ensureStudent, scoreRoom, removeStudent } = require("./src/rooms.js");
+const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent } = require("./src/rooms.js");
 const teacherAuth = require("./src/teacher-auth.js");
 
 const mime = {
@@ -22,18 +22,23 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+class BadRequest extends Error {}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
     req.on("data", chunk => {
       body += chunk;
-      if (body.length > 1_000_000) req.destroy();
+      if (body.length > 16384) {
+        reject(new BadRequest("Request too large."));
+        req.destroy();
+      }
     });
     req.on("end", () => {
       try {
         resolve(body ? JSON.parse(body) : {});
       } catch (err) {
-        reject(err);
+        reject(new BadRequest("Could not process this request."));
       }
     });
   });
@@ -75,23 +80,7 @@ const server = http.createServer(async (req, res) => {
       let room;
       do room = createRoom({ ...body, code: undefined }); while (rooms.has(room.code));
       rooms.set(room.code, room);
-      if (body.preview === true) {
-        room.preview = true;
-        for (let i = 0; i < 12; i++) {
-          const student = ensureStudent(room, { nickname: `Pair ${String(i + 1).padStart(2, "0")}` });
-          const tuned = physics.defaultDamperFor(student.tower);
-          // A repeatable mix of tuned, mistuned, loose, locked, and bare towers.
-          const designs = [
-            { ...tuned, massRatio: 0.08, damping: 0.25 },
-            { ...tuned, massRatio: 0.06, damping: 0.45 },
-            { ...tuned, length: tuned.length * 0.55, massRatio: 0.035, damping: 0.45 },
-            { ...tuned, massRatio: 0.01, damping: 0 },
-            { ...tuned, massRatio: 0.04, damping: 1 },
-            { ...tuned, enabled: false }
-          ];
-          student.submission = physics.clampDamper(designs[i % designs.length]);
-        }
-      }
+      if (body.preview === true) addPreviewGroups(room);
       return json(res, 200, { ...publicRoom(room), teacherToken: room.teacherToken });
     }
 
@@ -126,9 +115,8 @@ const server = http.createServer(async (req, res) => {
       const room = getRoom(code);
       if (!room) return json(res, 404, { error: "Room not found" });
       const body = await readBody(req);
-      const existing = Array.from(room.students.values()).find(s => s.token === body.token);
-      if (!existing && room.phase !== "design") return json(res, 409, { error: "This room is locked to new groups" });
-      if (!existing && room.students.size >= maxGroups) return json(res, 409, { error: `This room is full (${maxGroups} groups)` });
+      const error = joinError(room, body);
+      if (error) return json(res, 409, { error });
       const student = ensureStudent(room, body);
       broadcast(room);
       return json(res, 200, { token: student.token, student, room: publicRoom(room) });
@@ -140,12 +128,11 @@ const server = http.createServer(async (req, res) => {
       if (!room) return json(res, 404, { error: "Room not found" });
       if (room.phase !== "design") return json(res, 409, { error: "Design window is locked" });
       const body = await readBody(req);
-      const student = Array.from(room.students.values()).find(s => s.token === body.token);
+      const student = findStudent(room, body.token);
       if (!student) return json(res, 404, { error: "Student token not found" });
-      const d = body.submission;
-      if (!d || !Number.isFinite(d.length) || d.length < .7 || d.length > 17.7 || !Number.isFinite(d.massRatio) || d.massRatio < .01 || d.massRatio > .1 || !Number.isFinite(d.damping) || d.damping < 0 || d.damping > 1)
-        return json(res, 400, { error: "Enter length 0.7–17.7 m, mass 1–10%, and damping 0–1." });
-      student.submission = physics.clampDamper({ wallLimit: 2.7, ...(body.submission || {}) });
+      const error = submissionError(body.submission);
+      if (error) return json(res, 400, { error });
+      student.submission = physics.clampDamper({ wallLimit: 2.7, ...body.submission });
       broadcast(room);
       return json(res, 200, { student, room: publicRoom(room) });
     }
@@ -213,14 +200,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     let filePath = path.normalize(path.join(publicDir, url.pathname === "/" ? "index.html" : url.pathname));
-    if (!filePath.startsWith(publicDir)) return json(res, 403, { error: "Forbidden" });
+    if (!filePath.startsWith(publicDir + path.sep)) return json(res, 403, { error: "Forbidden" });
     fs.readFile(filePath, (err, data) => {
       if (err) return json(res, 404, { error: "Not found" });
       res.writeHead(200, { "Content-Type": mime[path.extname(filePath)] || "application/octet-stream" });
       res.end(data);
     });
   } catch (err) {
-    json(res, 500, { error: err.message });
+    if (err instanceof BadRequest) json(res, 400, { error: err.message });
+    else json(res, 500, { error: "Something went wrong. Please try again." });
   }
 });
 

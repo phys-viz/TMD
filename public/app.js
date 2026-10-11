@@ -1006,6 +1006,23 @@ function renderRoom() {
 
 }
 
+// Room results pack City samples as integer arrays (see packCitySamples in src/rooms.js).
+// Rooms scored before that change still hold arrays of sample objects.
+function citySample(result, time) {
+  const s = result?.samples;
+  if (Array.isArray(s)) return s[Math.min(s.length - 1, Math.floor(time / 0.05))];
+  if (!s?.sway?.length) return null;
+  const position = Math.min(s.sway.length - 1, Math.max(0, time / s.dt));
+  const i = Math.floor(position), j = Math.min(s.sway.length - 1, i + 1), f = position - i;
+  const at = (values, scale) => (values[i] + (values[j] - values[i]) * f) / scale;
+  return { t: time, y: at(s.y, 1e4), sway: at(s.sway, 1e4), theta: at(s.theta, 1e5), heat: at(s.heat, 0.01) };
+}
+
+function cityFinalSample(result) {
+  const s = result?.samples;
+  return Array.isArray(s) ? s.at(-1) : s?.end;
+}
+
 function renderCity() {
   const canvas = $("cityCanvas");
   const ctx = canvas.getContext("2d");
@@ -1050,17 +1067,16 @@ function renderCity() {
   students.forEach((s, i) => {
     const result = s.result;
     const sampleTime = result?.failureTime != null ? Math.min(t, result.failureTime) : t;
-    const idx = result?.samples?.length ? Math.min(result.samples.length - 1, Math.floor(sampleTime / 0.05)) : 0;
-    const terminal = result?.samples?.at(-1);
+    const terminal = cityFinalSample(result);
     const terminalPose = result?.status === "failed" && t >= result.failureTime && terminal && Math.abs(terminal.t - result.failureTime) < 1e-6;
-    const sample = (terminalPose ? terminal : result?.samples?.[idx]) || { t: 0, y: 0, sway: 0, theta: 0, heat: 0 };
+    const sample = (terminalPose ? terminal : citySample(result, sampleTime)) || { t: 0, y: 0, sway: 0, theta: 0, heat: 0 };
     const cx = cell * i + cell / 2;
     const fraction = P.clamp((s.tower.height - 170) / 180, 0, 1);
     const height = 180 + fraction * 160;
     const towerScale = Math.min(0.3, cell / 420);
     const layout = P.towerGeometry(s.tower);
     const verticalScale = height / (layout.bottom - layout.top);
-    const failureTime = result?.failureTime ?? result?.samples?.at(-1)?.t ?? Infinity;
+    const failureTime = result?.failureTime ?? terminal?.t ?? Infinity;
     const failed = result?.status === "failed" && (aftermath || t >= failureTime);
     const run = {
       tower: s.tower,
@@ -1269,8 +1285,8 @@ $("joinForm").addEventListener("submit", async event => {
   const code = $("studentRoom").value.trim().toUpperCase();
   const key = `tmd-token-${code}`;
   const nickname = $("nickname").value.trim();
-  // The token identifies the group; its display name can change independently.
-  const token = sessionStorage.getItem(key) || P.makeId("tok");
+  // The server issues the token that identifies the group; its display name can change independently.
+  const token = sessionStorage.getItem(key) || undefined;
   $("studentState").textContent = "Joining room...";
   try {
     const data = await api(`/api/rooms/${code}/join`, { nickname, token });

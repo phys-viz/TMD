@@ -2,6 +2,8 @@ const physics = require("../public/physics.js");
 
 // The City skyline gets crowded beyond this many towers.
 const maxGroups = 12;
+// The City interpolates between every other 0.05 s scoring sample.
+const citySampleStride = 2;
 
 const difficultySettings = {
   easy: { difficulty: "easy", dangerEnabled: false, collapseSway: physics.dangerSway, collapseTime: 3 },
@@ -35,8 +37,61 @@ function publicRoom(room) {
       submission: s.submission,
       result: s.result
     })),
-    results: room.results
+    // City samples already travel with each student; the results table needs only the summary.
+    results: room.results.map(({ studentId, nickname, submission, result: { samples, ...summary } }) =>
+      ({ studentId, nickname, submission, result: summary }))
   };
+}
+
+// Pack scoring samples into the fields the City draws, as integers:
+// ground and sway in 0.1 mm, pendulum angle in 0.01 mrad, damper heat in 100 J.
+// The final sample is kept exactly so a failed tower holds its contact pose.
+function packCitySamples(samples) {
+  const kept = samples.filter((_, i) => i % citySampleStride === 0);
+  const pack = (key, scale) => kept.map(s => Math.round(s[key] * scale));
+  const last = samples.at(-1);
+  return {
+    dt: 0.05 * citySampleStride,
+    y: pack("y", 1e4), sway: pack("sway", 1e4), theta: pack("theta", 1e5), heat: pack("heat", 0.01),
+    end: last && { t: last.t, y: last.y, sway: last.sway, theta: last.theta, heat: last.heat }
+  };
+}
+
+function addPreviewGroups(room) {
+  room.preview = true;
+  for (let i = 0; i < maxGroups; i++) {
+    const student = ensureStudent(room, { nickname: `Pair ${String(i + 1).padStart(2, "0")}` });
+    const tuned = physics.defaultDamperFor(student.tower);
+    // A repeatable mix of tuned, mistuned, loose, locked, and bare towers.
+    const designs = [
+      { ...tuned, massRatio: 0.08, damping: 0.25 },
+      { ...tuned, massRatio: 0.06, damping: 0.45 },
+      { ...tuned, length: tuned.length * 0.55, massRatio: 0.035, damping: 0.45 },
+      { ...tuned, massRatio: 0.01, damping: 0 },
+      { ...tuned, massRatio: 0.04, damping: 1 },
+      { ...tuned, enabled: false }
+    ];
+    student.submission = physics.clampDamper(designs[i % designs.length]);
+  }
+}
+
+function findStudent(room, token) {
+  return token ? Array.from(room.students.values()).find(s => s.token === token) : undefined;
+}
+
+// Returns an error message when a new group may not join, or null.
+function joinError(room, body) {
+  if (findStudent(room, body.token)) return null;
+  if (room.phase !== "design") return "This room is locked to new groups";
+  if (room.students.size >= maxGroups) return `This room is full (${maxGroups} groups)`;
+  return null;
+}
+
+// Returns an error message for an out-of-range design, or null.
+function submissionError(d) {
+  const inRange = (v, min, max) => Number.isFinite(v) && v >= min && v <= max;
+  if (d && inRange(d.length, 0.7, 17.7) && inRange(d.massRatio, 0.01, 0.1) && inRange(d.damping, 0, 1)) return null;
+  return "Enter length 0.7–17.7 m, mass 1–10%, and damping 0–1.";
 }
 
 function createRoom(body, assignedCode) {
@@ -72,15 +127,15 @@ function createRoom(body, assignedCode) {
 
 function ensureStudent(room, body) {
   const nickname = String(body.nickname || "Student").slice(0, 24);
-  const token = String(body.token || physics.makeId("tok")).slice(0, 80);
-  let student = Array.from(room.students.values()).find(s => s.token === token);
+  let student = findStudent(room, body.token);
   if (!student) {
     const index = room.nextStudentIndex ?? room.students.size;
     room.nextStudentIndex = index + 1;
     const id = physics.makeId("stu");
     student = {
       id,
-      token,
+      // Issued by the server so one group cannot guess or choose another's token.
+      token: crypto.randomUUID(),
       nickname,
       tower: physics.generateChallengeTower(room.config.seed, index),
       submission: null,
@@ -114,8 +169,8 @@ function scoreRoom(room) {
     // Groups without a submission are tested without a TMD but stay "not submitted".
     const submission = student.submission || { enabled: false };
     const result = physics.evaluateDesign(student.tower, submission, { ...room.quake, collapseSway: student.tower.dangerSwayLimit ?? physics.dangerSway });
-    student.result = result;
-    return { studentId: student.id, nickname: student.nickname, tower: student.tower, submission, result };
+    student.result = { ...result, samples: packCitySamples(result.samples) };
+    return { studentId: student.id, nickname: student.nickname, submission, result: student.result };
   }).sort((a, b) => {
     if (a.result.status !== b.result.status) return a.result.status === "standing" ? -1 : 1;
     return a.result.settleTime - b.result.settleTime || a.result.hits - b.result.hits || a.result.peakSway - b.result.peakSway;
@@ -132,4 +187,4 @@ function removeStudent(room, id) {
 }
 
 
-module.exports = { maxGroups, createRoom, publicRoom, ensureStudent, scoreRoom, removeStudent };
+module.exports = { maxGroups, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent };

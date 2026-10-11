@@ -631,7 +631,9 @@ for (const damping of [0, .25, 1]) {
   };
   const firstTab = tabStorage(), secondTab = tabStorage();
   const identities = [];
-  app.api = async (_, body) => { identities.push(body.token); return { token: body.token, student, room }; };
+  // Like the server, issue a new token on first join and keep a known one on reconnect.
+  let issued = 0;
+  app.api = async (_, body) => { const token = body.token || `issued-${++issued}`; identities.push(token); return { token, student, room }; };
   app.sessionStorage = firstTab;
   dom.nickname.value = 'Group A';
   await dom.joinForm.listeners.submit({ preventDefault() {} });

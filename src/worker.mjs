@@ -3,7 +3,7 @@ import rules from './rooms.js';
 import physics from '../public/physics.js';
 import teacherAuth from './teacher-auth.js';
 
-const { createRoom, publicRoom, ensureStudent, scoreRoom, removeStudent } = rules;
+const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent } = rules;
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode() {
@@ -68,7 +68,7 @@ export class ChallengeRoom extends DurableObject {
       }
       this.room.results = (saved.resultOrder || []).map(id => {
         const s = this.room.students.get(id);
-        return { studentId: id, nickname: s.nickname, tower: s.tower, submission: s.submission || { enabled: false }, result: s.result };
+        return { studentId: id, nickname: s.nickname, submission: s.submission || { enabled: false }, result: s.result };
       });
     });
   }
@@ -119,19 +119,7 @@ export class ChallengeRoom extends DurableObject {
         const body = await request.json();
         this.room = createRoom(body, url.searchParams.get('code'));
         this.room.clients = this.clients;
-        if (body.preview === true) {
-          this.room.preview = true;
-          for (let i = 0; i < 12; i++) {
-            const s = ensureStudent(this.room, { nickname: `Pair ${String(i + 1).padStart(2, '0')}` });
-            const tuned = physics.defaultDamperFor(s.tower);
-            const designs = [
-              { ...tuned, massRatio: .08, damping: .25 }, { ...tuned, massRatio: .06, damping: .45 },
-              { ...tuned, length: tuned.length * .55, massRatio: .035, damping: .45 },
-              { ...tuned, massRatio: .01, damping: 0 }, { ...tuned, massRatio: .04, damping: 1 }, { ...tuned, enabled: false }
-            ];
-            s.submission = physics.clampDamper(designs[i % designs.length]);
-          }
-        }
+        if (body.preview === true) addPreviewGroups(this.room);
         await this.save();
         return json({ ...publicRoom(this.room), teacherToken: this.room.teacherToken });
       }
@@ -178,9 +166,8 @@ export class ChallengeRoom extends DurableObject {
       }
       if (url.pathname === '/join') {
         const body = await request.json();
-        const existing = Array.from(room.students.values()).find(s => s.token === body.token);
-        if (!existing && room.phase !== 'design') return json({ error: 'This room is locked to new groups' }, 409);
-        if (!existing && room.students.size >= rules.maxGroups) return json({ error: `This room is full (${rules.maxGroups} groups)` }, 409);
+        const error = joinError(room, body);
+        if (error) return json({ error }, 409);
         const student = ensureStudent(room, body);
         await this.save();
         return json({ token: student.token, student, room: publicRoom(room) });
@@ -188,12 +175,11 @@ export class ChallengeRoom extends DurableObject {
       if (url.pathname === '/submit') {
         if (room.phase !== 'design') return json({ error: 'Design window is locked' }, 409);
         const body = await request.json();
-        const student = Array.from(room.students.values()).find(s => s.token === body.token);
+        const student = findStudent(room, body.token);
         if (!student) return json({ error: 'Student token not found' }, 404);
-        const d = body.submission;
-        if (!d || !Number.isFinite(d.length) || d.length < .7 || d.length > 17.7 || !Number.isFinite(d.massRatio) || d.massRatio < .01 || d.massRatio > .1 || !Number.isFinite(d.damping) || d.damping < 0 || d.damping > 1)
-          return json({ error: 'Enter length 0.7–17.7 m, mass 1–10%, and damping 0–1.' }, 400);
-        student.submission = physics.clampDamper({ wallLimit: 2.7, ...d });
+        const error = submissionError(body.submission);
+        if (error) return json({ error }, 400);
+        student.submission = physics.clampDamper({ wallLimit: 2.7, ...body.submission });
         await this.save();
         return json({ student, room: publicRoom(room) });
       }

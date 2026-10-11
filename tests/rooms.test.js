@@ -59,11 +59,12 @@ async function post(path, body) {
     const regular = await post('/api/rooms', { seed: 'regular' });
     assert.equal(regular.students.length, 0);
     assert.equal(regular.preview, false);
-    const joined = await post(`/api/rooms/${regular.code}/join`, { nickname: "Pair A", token: "pair-a-token" });
+    const joined = await post(`/api/rooms/${regular.code}/join`, { nickname: "Pair A", token: "client-chosen-token" });
+    assert.notEqual(joined.token, "client-chosen-token", "the server issues student tokens");
     const assigned = joined.student.tower;
     assert.deepEqual(assigned, { ...P.createLabTower(assigned.height, assigned.mass), name: assigned.name }, "the assigned dimensions recreate identical physics in Solo Lab");
     assert.equal(assigned.mass % 100000, 0, "assigned mass uses the displayed precision");
-    const rejoined = await post(`/api/rooms/${regular.code}/join`, { nickname: "Pair A", token: "pair-a-token" });
+    const rejoined = await post(`/api/rooms/${regular.code}/join`, { nickname: "Pair A", token: joined.token });
     assert.deepEqual(rejoined.student.tower, assigned, "reconnecting preserves the assignment");
     const other = await post(`/api/rooms/${regular.code}/join`, { nickname: "Pair B", token: "pair-b-token" });
     assert.notDeepEqual([other.student.tower.height, other.student.tower.mass], [assigned.height, assigned.mass]);
@@ -101,13 +102,17 @@ async function post(path, body) {
     assert.notDeepEqual(updated.result.samples, originalResult.samples, "retesting after unlock simulates the revised design");
     const expectedRevision = P.evaluateDesign(assigned, updated.submission, { ...nextRun.quake, collapseSway: assigned.dangerSwayLimit });
     assert.equal(updated.result.status, expectedRevision.status, "city survival uses the latest submitted settings");
-    assert.equal(updated.result.samples.length, expectedRevision.samples.length);
-    updated.result.samples.forEach((sample, index) => {
-      for (const key of ['t', 'x', 'y', 'sway', 'theta', 'heat']) {
-        const expected = expectedRevision.samples[index][key];
-        assert(Math.abs(sample[key] - expected) <= 1e-9 * Math.max(1, Math.abs(expected)), `revised city sample ${index} ${key} matches the new design`);
+    // City samples keep every other scoring sample, rounded to 0.1 mm, 0.01 mrad, and 100 J.
+    const packed = updated.result.samples;
+    const kept = expectedRevision.samples.filter((_, i) => i % 2 === 0);
+    assert.equal(packed.sway.length, kept.length);
+    kept.forEach((expected, index) => {
+      for (const [key, scale] of [['y', 1e4], ['sway', 1e4], ['theta', 1e5], ['heat', 0.01]]) {
+        assert(Math.abs(packed[key][index] / scale - expected[key]) <= 0.5 / scale + 1e-12, `revised city sample ${index} ${key} matches the new design`);
       }
     });
+    assert.deepEqual(packed.end, (({ t, y, sway, theta, heat }) => ({ t, y, sway, theta, heat }))(expectedRevision.samples.at(-1)), "the final pose is kept exactly");
+    assert.equal(nextRun.results[0].result.samples, undefined, "the results table does not repeat City samples");
     await post(`/api/rooms/${regular.code}/unlock`);
     const lateJoin = await post(`/api/rooms/${regular.code}/join`, { nickname: 'Pair C', token: 'pair-c-token' });
     assert.equal(lateJoin.room.students.length, 3, "unlock permits new groups");
@@ -140,7 +145,7 @@ async function post(path, body) {
     assert.equal(removed.deleted, true);
     assert.equal((await fetch(`${baseUrl}/api/rooms/${regular.code}`)).status, 404, "deleted room is no longer accessible");
     const removedJoin = await fetch(`${baseUrl}/api/rooms/${regular.code}/join`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'pair-a-token' })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: joined.token })
     });
     assert.equal(removedJoin.status, 404, "students cannot reconnect to a deleted room");
     assert.equal((await fetch(`${baseUrl}/api/rooms/${room.code}`)).status, 200, "deleting one room preserves other rooms");
@@ -151,9 +156,14 @@ async function post(path, body) {
     await post(`/api/rooms/${capped.code}/lock`);
     assert.equal((await joinCapped('Late', 'late-token')).status, 409, "locked rooms reject new groups");
     await post(`/api/rooms/${capped.code}/unlock`);
-    for (let i = 0; i < 12; i++) assert.equal((await joinCapped(`Pair ${i}`, `cap-token-${i}`)).status, 200);
-    assert.equal((await joinCapped('Pair 13', 'cap-token-13')).status, 409, "rooms hold at most 12 groups");
-    assert.equal((await joinCapped('Pair 0', 'cap-token-0')).status, 200, "existing groups can still reconnect to a full room");
+    const capTokens = [];
+    for (let i = 0; i < 12; i++) {
+      const response = await joinCapped(`Pair ${i}`);
+      assert.equal(response.status, 200);
+      capTokens.push((await response.json()).token);
+    }
+    assert.equal((await joinCapped('Pair 13')).status, 409, "rooms hold at most 12 groups");
+    assert.equal((await joinCapped('Pair 0', capTokens[0])).status, 200, "existing groups can still reconnect to a full room");
     console.log('Class preview API tests passed.');
   } finally { server?.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
