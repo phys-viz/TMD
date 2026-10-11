@@ -513,7 +513,7 @@ dom.roster.querySelector = () => ({ innerHTML: "" });
 vm.runInContext(`currentRoom.config = { difficulty: "medium", amplitude: .62, pulseDuration: 3 }; currentRoom.students[0].id = "assigned-pair"; currentStudent = currentRoom.students[0]; currentStudent.submission = null; renderRoom()`, app);
 assert(!dom.studentTower.innerHTML.includes("Natural period"), "challenge hides the period");
 assert(!dom.studentTower.innerHTML.includes("calculated length"), "challenge hides the calculated TMD length");
-assert(dom.studentTower.innerHTML.includes("Use this height and mass in Solo Lab"), "assignment explains the independent lab workflow");
+assert(dom.studentTower.innerHTML.includes("Use this height and mass in the Solo Lab"), "assignment explains the independent lab workflow");
 assert.equal(dom.submitLength.value, "", "rendering an assignment does not fill in a tuned length");
 const originalQueryAll = app.document.querySelectorAll;
 const views = ["lab", "student", "teacherLogin", "teacher", "city"].map(id => { dom[id].id = id; return dom[id]; });
