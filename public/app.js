@@ -987,6 +987,7 @@ function renderRoom() {
     $(id).className = `button-${controls[id] || "secondary"}`;
   }
   $("deleteRoomBtn").disabled = !teacher;
+  renderBlockedNames(teacher);
   renderTeacherRooms();
   const roomMode = DIFFICULTY[currentRoom.config.difficulty]?.label || "Medium";
   const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[phase] || phase;
@@ -1025,6 +1026,24 @@ function renderRoom() {
   $("studentTower").innerHTML = `${lockBanner}<div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in Solo Lab. Measure the period and tune your TMD, then submit your settings here.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
   $("joinedSummary").innerHTML = `<strong>${escapeHtml(latest.nickname)}</strong> · Room ${escapeHtml(currentRoom.code)} · ${escapeHtml(phaseLabel)}`;
   if (!joinEditing) showJoined(true);
+}
+
+// Blocked names stay collapsed so they are not shown on a projected dashboard by accident.
+let blockedNamesLoaded = "";
+async function renderBlockedNames(teacher) {
+  const count = currentRoom?.blockedCount || 0;
+  $("blockedNamesBox").hidden = !teacher || !count;
+  if (!teacher || !count) return;
+  $("blockedNamesSummary").textContent = `Blocked group names (${count})`;
+  const key = `${currentRoom.code}:${count}`;
+  if (blockedNamesLoaded === key) return;
+  blockedNamesLoaded = key;
+  try {
+    const { blockedNames } = await api(`/api/rooms/${currentRoom.code}/blocked-names`);
+    $("blockedNamesList").innerHTML = blockedNames.slice().reverse().map(entry => `<li><span>${escapeHtml(entry.name)}</span><time>${new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time></li>`).join("");
+  } catch (error) {
+    blockedNamesLoaded = "";
+  }
 }
 
 // Once a group has joined, the join form collapses to a one-line strip so the design card gets the width.
@@ -1330,8 +1349,10 @@ $("joinForm").addEventListener("submit", async event => {
     renderRoom();
     $("submitState").textContent = data.student.submission ? "Your saved design is restored. You can revise it before the room is locked." : "Enter your tested settings, then submit your design.";
   } catch (error) {
-    currentStudent = null;
     $("studentState").textContent = `Could not join: ${error.message}`;
+    // A rejected rename leaves the group joined under its old name.
+    if (token) return;
+    currentStudent = null;
     $("studentTower").textContent = "Join a room to receive a tower.";
   }
 

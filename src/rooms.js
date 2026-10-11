@@ -1,7 +1,10 @@
 const physics = require("../public/physics.js");
+const { isBlockedName } = require("./name-filter.js");
 
 // The City skyline gets crowded beyond this many towers.
 const maxGroups = 12;
+// The teacher's blocked-name log keeps only the most recent attempts.
+const maxBlockedNames = 50;
 // The City interpolates between every other 0.05 s scoring sample.
 const citySampleStride = 2;
 
@@ -38,6 +41,7 @@ function publicRoom(room) {
       result: s.result
     })),
     // City samples already travel with each student; the results table needs only the summary.
+    blockedCount: (room.blockedNames || []).length,
     results: room.results.map(({ studentId, nickname, submission, result: { samples, ...summary } }) =>
       ({ studentId, nickname, submission, result: summary }))
   };
@@ -79,8 +83,18 @@ function findStudent(room, token) {
   return token ? Array.from(room.students.values()).find(s => s.token === token) : undefined;
 }
 
-// Returns an error message when a new group may not join, or null.
+function nicknameOf(body) {
+  return String(body.nickname || "Student").slice(0, 24);
+}
+
+// Returns an error message when a group may not join or rename, or null.
+// Blocked names are logged for the teacher.
 function joinError(room, body) {
+  const nickname = nicknameOf(body);
+  if (isBlockedName(nickname)) {
+    room.blockedNames = [...(room.blockedNames || []), { name: nickname, at: Date.now() }].slice(-maxBlockedNames);
+    return "Please choose a different group name.";
+  }
   if (findStudent(room, body.token)) return null;
   if (room.phase !== "design") return "This room is locked to new groups";
   if (room.students.size >= maxGroups) return `This room is full (${maxGroups} groups)`;
@@ -126,7 +140,7 @@ function createRoom(body, assignedCode) {
 }
 
 function ensureStudent(room, body) {
-  const nickname = String(body.nickname || "Student").slice(0, 24);
+  const nickname = nicknameOf(body);
   let student = findStudent(room, body.token);
   if (!student) {
     const index = room.nextStudentIndex ?? room.students.size;
@@ -187,4 +201,4 @@ function removeStudent(room, id) {
 }
 
 
-module.exports = { maxGroups, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent };
+module.exports = { maxGroups, isBlockedName, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent };

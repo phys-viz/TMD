@@ -72,7 +72,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader("Set-Cookie", teacherAuth.logout(false));
       return json(res, 200, { teacher: false });
     }
-    const teacherAction = req.method === "POST" && (url.pathname === "/api/rooms" || /\/(lock|unlock|start|replay|delete|remove-student)$/.test(url.pathname));
+    const teacherAction = req.method === "POST" && (url.pathname === "/api/rooms" || /\/(lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname));
     if (teacherAction && !teacher) return json(res, 403, { error: "Enter the teacher password to use teacher controls." });
 
     if (req.method === "POST" && url.pathname === "/api/rooms") {
@@ -115,8 +115,12 @@ const server = http.createServer(async (req, res) => {
       const room = getRoom(code);
       if (!room) return json(res, 404, { error: "Room not found" });
       const body = await readBody(req);
+      const log = room.blockedNames;
       const error = joinError(room, body);
-      if (error) return json(res, 409, { error });
+      if (error) {
+        if (room.blockedNames !== log) broadcast(room);
+        return json(res, 409, { error });
+      }
       const student = ensureStudent(room, body);
       broadcast(room);
       return json(res, 200, { token: student.token, student, room: publicRoom(room) });
@@ -137,10 +141,15 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { student, room: publicRoom(room) });
     }
 
-    if (req.method === "POST" && /^\/api\/rooms\/[^/]+\/(lock|unlock|start|replay|delete|remove-student)$/.test(url.pathname)) {
+    if (req.method === "POST" && /^\/api\/rooms\/[^/]+\/(lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname)) {
       const room = getRoom(url.pathname.split("/")[3]);
       if (!room) return json(res, 404, { error: "Room not found" });
       if (req.headers["x-teacher-token"] !== room.teacherToken) return json(res, 403, { error: "Only this room's teacher can use this control." });
+    }
+
+    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/blocked-names$/)) {
+      const room = getRoom(url.pathname.split("/")[3]);
+      return json(res, 200, { blockedNames: room.blockedNames || [] });
     }
 
     if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/remove-student$/)) {

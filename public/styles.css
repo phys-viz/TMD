@@ -689,3 +689,10 @@ th { color: #425160; }
 #student .joined-strip button { min-height: 38px; padding: 6px 14px; background: #f0f4f6; color: #3b5362; border-color: #c6d3db; box-shadow: none; }
 .challenge-layout.joined #joinForm { padding-top: 14px; padding-bottom: 14px; }
 .lock-banner { margin: -4px 0 16px; padding: 12px 16px; border-radius: 8px; background: #fff1d6; border: 1px solid #e4c68a; color: #6b4a12; font-weight: 700; }
+
+/* Teacher-only log of group names the filter turned away. */
+.blocked-names { margin-top: 20px; padding: 12px 16px; border: 1px solid #d8e1e6; border-radius: 8px; background: #f7f9fa; }
+.blocked-names summary { font-size: .95rem; color: #4d6472; }
+.blocked-names ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.blocked-names li { display: flex; justify-content: space-between; gap: 16px; font-size: .95rem; color: #314b59; }
+.blocked-names time { color: #8193a0; font-variant-numeric: tabular-nums; }

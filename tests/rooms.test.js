@@ -164,6 +164,24 @@ async function post(path, body) {
     }
     assert.equal((await joinCapped('Pair 13')).status, 409, "rooms hold at most 12 groups");
     assert.equal((await joinCapped('Pair 0', capTokens[0])).status, 200, "existing groups can still reconnect to a full room");
+
+    const named = await post('/api/rooms', { seed: 'names' });
+    const joinNamed = (nickname, token) => fetch(`${baseUrl}/api/rooms/${named.code}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nickname, token }) });
+    const rude = await joinNamed('F.u.c.k Towers');
+    assert.equal(rude.status, 409);
+    assert.equal((await rude.json()).error, 'Please choose a different group name.', "blocked names get a generic message");
+    const okJoin = await joinNamed('Class Act');
+    assert.equal(okJoin.status, 200, "ordinary names that contain short blocked words still join");
+    const okToken = (await okJoin.json()).token;
+    assert.equal((await joinNamed('Big Ass', okToken)).status, 409, "renaming is filtered too");
+    const namedRoom = await (await fetch(`${baseUrl}/api/rooms/${named.code}`)).json();
+    assert.equal(namedRoom.students[0].nickname, 'Class Act', "a rejected rename keeps the old name");
+    assert.equal(namedRoom.blockedCount, 2, "the room counts blocked attempts");
+    assert.equal(JSON.stringify(namedRoom).includes('Towers'), false, "blocked names are not broadcast to students");
+    const studentPeek = await fetch(`${baseUrl}/api/rooms/${named.code}/blocked-names`, { method: 'POST' });
+    assert.equal(studentPeek.status, 403, "only the teacher can read blocked names");
+    const log = await post(`/api/rooms/${named.code}/blocked-names`);
+    assert.deepEqual(log.blockedNames.map(entry => entry.name), ['F.u.c.k Towers', 'Big Ass']);
     console.log('Class preview API tests passed.');
   } finally { server?.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

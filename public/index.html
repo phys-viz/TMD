@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-27">
+  <link rel="stylesheet" href="/styles.css?v=classroom-28">
 </head>
 <body>
   <header class="topbar">
@@ -212,6 +212,7 @@
           </div>
           <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3></div>
           <div class="roster-scroll"><table id="roster"><thead><tr><th>Group</th><th class="num">Tower period</th><th>Status</th><th class="num">Pendulum length</th><th class="num">TMD mass</th><th class="num">Damping</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody></tbody></table></div>
+          <details id="blockedNamesBox" class="blocked-names" hidden><summary id="blockedNamesSummary">Blocked group names</summary><ul id="blockedNamesList"></ul></details>
           <div class="room-danger"><button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button></div>
         </div>
       </div>
@@ -258,6 +259,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-33"></script>
+  <script src="/app.js?v=classroom-34"></script>
 </body>
 </html>

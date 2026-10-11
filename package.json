@@ -5,7 +5,7 @@
   "description": "Browser prototype for a tuned mass damper skyscraper lab and classroom city challenge.",
   "scripts": {
     "start": "node --env-file-if-exists=.dev.vars server.js",
-    "test": "node tests/physics.test.js && node tests/rendering.test.js && node tests/rooms.test.js",
+    "test": "node tests/physics.test.js && node tests/name-filter.test.js && node tests/rendering.test.js && node tests/rooms.test.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:check": "wrangler deploy --dry-run"

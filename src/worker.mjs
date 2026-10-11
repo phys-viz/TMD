@@ -31,7 +31,7 @@ export default {
       }
       if (url.pathname === '/api/teacher/logout' && request.method === 'POST')
         return Response.json({ teacher: false }, { headers: { 'Set-Cookie': teacherAuth.logout(), 'Cache-Control': 'no-store' } });
-      const teacherAction = request.method === 'POST' && (url.pathname === '/api/rooms' || /\/(lock|unlock|start|replay|delete|remove-student)$/.test(url.pathname));
+      const teacherAction = request.method === 'POST' && (url.pathname === '/api/rooms' || /\/(lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname));
       if (teacherAction && !teacher) return json({ error: 'Enter the teacher password to use teacher controls.' }, 403);
       if (url.pathname === '/api/rooms' && request.method === 'POST') {
         for (let attempt = 0; attempt < 5; attempt++) {
@@ -41,7 +41,7 @@ export default {
         }
         return json({ error: 'Please try creating a room again.' }, 503);
       }
-      const match = url.pathname.match(/^\/(?:api\/rooms|events)\/([A-Z2-9]{5,6})(?:\/(join|submit|lock|unlock|start|replay|delete|remove-student))?$/i);
+      const match = url.pathname.match(/^\/(?:api\/rooms|events)\/([A-Z2-9]{5,6})(?:\/(join|submit|lock|unlock|start|replay|delete|remove-student|blocked-names))?$/i);
       if (!match) return json({ error: 'Room not found' }, 404);
       const action = url.pathname.startsWith('/events/') ? 'events' : (match[2] || 'state');
       return env.ROOMS.getByName(match[1].toUpperCase()).fetch(new Request(`${url.origin}/${action}`, options));
@@ -89,7 +89,7 @@ export class ChallengeRoom extends DurableObject {
     }
     await this.ctx.storage.put('room', {
       code: r.code, teacherToken: r.teacherToken, createdAt: r.createdAt, expiresAt: r.expiresAt,
-      phase: r.phase, preview: r.preview || false, config: r.config, quake: r.quake, nextStudentIndex: r.nextStudentIndex,
+      phase: r.phase, preview: r.preview || false, config: r.config, quake: r.quake, nextStudentIndex: r.nextStudentIndex, blockedNames: r.blockedNames || [],
       students: students.map(s => ({ ...s, result: null })), resultOrder: r.results.map(s => s.studentId)
     });
     await this.ctx.storage.setAlarm(r.expiresAt);
@@ -144,8 +144,9 @@ export class ChallengeRoom extends DurableObject {
         return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform' } });
       }
       if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-      if (['/lock', '/unlock', '/start', '/replay', '/delete', '/remove-student'].includes(url.pathname) && request.headers.get('X-Teacher-Token') !== room.teacherToken)
+      if (['/lock', '/unlock', '/start', '/replay', '/delete', '/remove-student', '/blocked-names'].includes(url.pathname) && request.headers.get('X-Teacher-Token') !== room.teacherToken)
         return json({ error: "Only this room's teacher can use this control." }, 403);
+      if (url.pathname === '/blocked-names') return json({ blockedNames: room.blockedNames || [] });
       if (url.pathname === '/remove-student') {
         const { studentId } = await request.json();
         if (!removeStudent(room, studentId)) return json({ error: 'Group not found' }, 404);
@@ -166,8 +167,13 @@ export class ChallengeRoom extends DurableObject {
       }
       if (url.pathname === '/join') {
         const body = await request.json();
+        const log = room.blockedNames;
         const error = joinError(room, body);
-        if (error) return json({ error }, 409);
+        if (error) {
+          // A blocked name is saved so the teacher's log and its count stay current.
+          if (room.blockedNames !== log) await this.save();
+          return json({ error }, 409);
+        }
         const student = ensureStudent(room, body);
         await this.save();
         return json({ token: student.token, student, room: publicRoom(room) });
