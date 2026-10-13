@@ -11,6 +11,7 @@ Requires Node.js 22 or newer. From this folder:
 ```powershell
 npm install --include=dev
 npm test
+npm run test:worker
 npm run deploy:check
 npx wrangler login
 npm run deploy
@@ -26,7 +27,7 @@ You can skip login if Wrangler is already signed into the correct account. Deplo
 - Refreshing the teacher browser restores its last room. Clearing browser storage loses the teacher key; create a new room if that happens. Use the same browser profile for teaching and projecting.
 - Students rejoin with the room code in the same browser; their private token preserves the assignment and submission. Use anonymous pair names.
 - Rooms and per-tower scoring samples are saved and survive Worker restarts and redeployments. Rooms expire after 24 hours.
-- Live updates use server-sent events with heartbeats and automatic browser reconnection. Test them on the actual school network.
+- Browsers receive server-sent events with heartbeats and automatic reconnection. The hosted Worker bridges those streams to hibernatable WebSockets in the room Durable Object. Browser keepalives run in the Worker, so idle rooms can sleep while clients stay connected. Node development continues to use its existing SSE server. Test live updates on the actual school network.
 - Challenge mass is entered as 1–10%, matching Solo Lab. Damping starts at zero. Different preview designs intentionally retain their varied damping values.
 
 ## Pilot rehearsal
@@ -45,4 +46,12 @@ Leaderboards and the shared five-minute countdown are still proposed features.
 
 `npm start` runs the Node prototype on port 3000 with memory-only rooms. `npm run dev` runs the Cloudflare runtime on port 8787 with locally persisted rooms under .wrangler. These are separate room stores.
 
-References: https://developers.cloudflare.com/durable-objects/get-started/ and https://developers.cloudflare.com/workers/static-assets/
+`npm run test:worker` starts an isolated local Cloudflare runtime with a temporary test password and room store. It runs the room API checks, including connected clients remaining idle before receiving new updates, reconnection, and deletion notifications. It stops the test runtime and removes its temporary room store afterward.
+
+## Room service daily limit
+
+Cloudflare can reject room requests with `Exceeded allowed duration in Durable Objects free tier.` This is an account-level daily usage limit, even when the website and teacher login still work. The former room SSE heartbeat timer kept Durable Objects awake while rooms were idle. The hosted backend now uses the WebSocket Hibernation API and keeps browser SSE heartbeats outside the room object.
+
+Exhausted daily allowances reset at 00:00 UTC (8 p.m. Eastern during daylight saving time). Deploying the efficiency fix does not replenish usage already consumed. Affected requests receive a clear daily-limit message until the allowance resets. The error handler catches rejected room lookups as well as creation requests and logs the route and backend error, excluding request bodies, headers, and cookies.
+
+References: https://developers.cloudflare.com/durable-objects/get-started/, https://developers.cloudflare.com/workers/static-assets/, https://developers.cloudflare.com/durable-objects/best-practices/websockets/, and https://developers.cloudflare.com/durable-objects/platform/pricing/

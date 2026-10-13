@@ -26,6 +26,7 @@ Open the Teacher tab, choose earthquake settings, and click **Preview 12-pair cl
 
 ```bash
 npm.cmd test
+npm.cmd run test:worker
 ```
 
 ## Current Prototype
@@ -151,6 +152,6 @@ Solo and comparison testing start at damping 0. New challenge submissions also s
 
 ## Cloudflare hosting
 
-See [HOSTING.md](HOSTING.md) for deployment and the classroom pilot. `npm run dev` runs the Cloudflare Worker locally; `npm run deploy:check` checks the build without publishing; `npm run deploy` publishes the Worker and assets. Persistent rooms expire after 24 hours. Teacher actions require the creator's private browser key.
+See [HOSTING.md](HOSTING.md) for deployment and the classroom pilot. `npm run dev` runs the Cloudflare Worker locally; `npm run test:worker` tests its room API and idle live connections; `npm run deploy:check` checks the build without publishing; `npm run deploy` publishes the Worker and assets. Persistent rooms expire after 24 hours. Teacher actions require the creator's private browser key. Hosted live updates use hibernatable room WebSockets bridged to browser SSE, allowing idle rooms to sleep without disconnecting clients. Exhausted Cloudflare daily allowances reset at 00:00 UTC; the service reports this limit explicitly.
 
 City scales the complete canonical Solo tower scene, including columns, pendulum, mounts, and collision geometry. Solo practice and official scoring share the same advanceTrial integration and danger/collision rules; scoring ends at the first failure and preserves its contact pose.

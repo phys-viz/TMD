@@ -6,6 +6,43 @@ let teacherCookie = "";
 const baseUrl = process.env.TMD_TEST_URL || 'http://localhost:3197';
 const server = process.env.TMD_TEST_URL ? null : spawn(process.execPath, ['server.js'], { env: { ...process.env, PORT: '3197', TEACHER_PASSWORD: teacherPassword }, stdio: ['ignore', 'pipe', 'pipe'] });
 const teacherKeys = new Map();
+async function roomEvents(code) {
+  const controller = new AbortController();
+  const response = await fetch(`${baseUrl}/events/${code}`, { signal: controller.signal });
+  assert.equal(response.status, 200);
+  assert(response.headers.get('content-type').startsWith('text/event-stream'));
+  const reader = response.body.getReader(), decoder = new TextDecoder();
+  let buffered = '';
+  async function readMatching(predicate) {
+    while (true) {
+      const boundary = buffered.indexOf('\n\n');
+      if (boundary >= 0) {
+        const frame = buffered.slice(0, boundary);
+        buffered = buffered.slice(boundary + 2);
+        const data = frame.split('\n').find(line => line.startsWith('data: '));
+        if (data) {
+          const room = JSON.parse(data.slice(6));
+          if (predicate(room)) return room;
+        }
+      } else {
+        const chunk = await reader.read();
+        assert.equal(chunk.done, false, 'live room stream stays connected');
+        buffered += decoder.decode(chunk.value, { stream: true });
+      }
+    }
+  }
+  return {
+    async next(predicate = () => true) {
+      let timer;
+      try {
+        return await Promise.race([readMatching(predicate), new Promise((_, reject) => {
+          timer = setTimeout(() => { controller.abort(); reject(new Error('Timed out waiting for a room update')); }, 5000);
+        })]);
+      } finally { clearTimeout(timer); }
+    },
+    close() { controller.abort(); }
+  };
+}
 async function post(path, body) {
   const response = await fetch(`${baseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Teacher-Token': teacherKeys.get(path.split('/')[3]) || '', Cookie: teacherCookie }, body: JSON.stringify(body || {}) });
   assert.equal(response.status, 200);
@@ -29,6 +66,20 @@ async function post(path, body) {
     assert(login.headers.get('set-cookie').includes('HttpOnly'), "teacher session cannot be read by browser scripts");
     const session = await (await fetch(`${baseUrl}/api/teacher/session`, { headers: { Cookie: teacherCookie } })).json();
     assert.equal(session.teacher, true);
+    if (process.env.TMD_TEST_WORKER === '1') {
+      for (const method of ['GET', 'POST']) for (const type of ['quota', 'backend-error']) {
+        const response = await fetch(`${baseUrl}/test/${type}`, {
+          method, headers: { Cookie: teacherCookie, 'Content-Type': 'application/json' },
+          ...(method === 'POST' ? { body: '{}' } : {})
+        });
+        assert.equal(response.status, 503, 'asynchronous room failures produce a controlled unavailable response');
+        assert(response.headers.get('content-type').startsWith('application/json'), 'room errors stay JSON rather than Cloudflare exception pages');
+        const error = (await response.json()).error;
+        if (type === 'quota') {
+          assert(error.includes('daily usage limit') && error.includes('00:00 UTC'), 'exhausted daily allowance explains when the service can recover');
+        } else assert.equal(error, 'Room service unavailable. Please try again.');
+      }
+    }
     const tampered = await (await fetch(`${baseUrl}/api/teacher/session`, { headers: { Cookie: teacherCookie + 'a' } })).json();
     assert.equal(tampered.teacher, false, "modified session cookies are rejected");
     const room = await post('/api/rooms', { preview: true, seed: 'preview-test', difficulty: 'hard', amplitude: 0.65, runDuration: 20 });
@@ -183,6 +234,28 @@ async function post(path, body) {
     assert.equal(studentPeek.status, 403, "only the teacher can read blocked names");
     const log = await post(`/api/rooms/${named.code}/blocked-names`);
     assert.deepEqual(log.blockedNames.map(entry => entry.name), ['F.u.c.k Towers', 'Big Ass']);
+    const live = await post('/api/rooms', { seed: 'live-updates' });
+    const teacherEvents = await roomEvents(live.code);
+    let studentEvents;
+    try {
+      const initial = await teacherEvents.next();
+      assert.equal(initial.code, live.code);
+      assert.equal(initial.teacherToken, undefined, 'event streams never expose teacher credentials');
+      // In the Cloudflare runtime, leave the connection idle long enough for
+      // Durable Object hibernation before waking it with a room mutation.
+      if (process.env.TMD_TEST_WORKER === '1') await new Promise(resolve => setTimeout(resolve, 11000));
+      await post(`/api/rooms/${live.code}/join`, { nickname: 'Live Pair' });
+      const joinedUpdate = await teacherEvents.next(room => room.students?.length === 1);
+      assert.equal(joinedUpdate.students[0].nickname, 'Live Pair', 'the existing connection receives updates after idle time');
+      studentEvents = await roomEvents(live.code);
+      assert.equal((await studentEvents.next()).students.length, 1, 'reconnecting receives the current room snapshot');
+      await post(`/api/rooms/${live.code}/lock`);
+      assert.equal((await teacherEvents.next(room => room.phase === 'locked')).phase, 'locked');
+      assert.equal((await studentEvents.next(room => room.phase === 'locked')).phase, 'locked', 'all connected clients receive the change');
+      await post(`/api/rooms/${live.code}/delete`);
+      assert.equal((await teacherEvents.next(room => room.deleted)).code, live.code, 'deletion reaches the teacher stream before it closes');
+      assert.equal((await studentEvents.next(room => room.deleted)).code, live.code, 'deletion reaches student streams before they close');
+    } finally { teacherEvents.close(); studentEvents?.close(); }
     console.log('Class preview API tests passed.');
   } finally { server?.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

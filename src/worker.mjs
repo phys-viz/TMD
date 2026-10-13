@@ -10,6 +10,43 @@ function roomCode() {
   return Array.from(crypto.getRandomValues(new Uint8Array(6)), n => alphabet[n % alphabet.length]).join('');
 }
 
+async function roomEvents(stub, origin) {
+  const response = await stub.fetch(new Request(`${origin}/events`, { headers: { Upgrade: 'websocket' } }));
+  if (response.status !== 101) return response;
+  const socket = response.webSocket;
+  const encoder = new TextEncoder();
+  let heartbeat, controller, closed = false;
+  function finish(error) {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    if (error) controller.error(error);
+    else controller.close();
+  }
+  const stream = new ReadableStream({
+    start(c) {
+      controller = c;
+      socket.addEventListener('message', event => {
+        if (!closed) c.enqueue(encoder.encode(`data: ${event.data}\n\n`));
+      });
+      socket.addEventListener('close', () => finish());
+      socket.addEventListener('error', () => finish(new Error('Room connection closed.')));
+      socket.accept();
+      // Keep browser SSE connections alive here, outside the Durable Object.
+      // No heartbeat reaches the room, so idle rooms remain hibernateable.
+      heartbeat = setInterval(() => {
+        if (!closed) c.enqueue(encoder.encode(': keepalive\n\n'));
+      }, 20000);
+    },
+    cancel() {
+      closed = true;
+      clearInterval(heartbeat);
+      socket.close(1000, 'Browser disconnected');
+    }
+  });
+  return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform' } });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -44,8 +81,14 @@ export default {
       const match = url.pathname.match(/^\/(?:api\/rooms|events)\/([A-Z2-9]{5,6})(?:\/(join|submit|lock|unlock|start|replay|delete|remove-student|blocked-names))?$/i);
       if (!match) return json({ error: 'Room not found' }, 404);
       const action = url.pathname.startsWith('/events/') ? 'events' : (match[2] || 'state');
-      return env.ROOMS.getByName(match[1].toUpperCase()).fetch(new Request(`${url.origin}/${action}`, options));
-    } catch (_) {
+      const stub = env.ROOMS.getByName(match[1].toUpperCase());
+      if (action === 'events' && request.method === 'GET') return await roomEvents(stub, url.origin);
+      return await stub.fetch(new Request(`${url.origin}/${action}`, options));
+    } catch (error) {
+      console.error('Room service request failed', { path: url.pathname, method: request.method, message: error.message });
+      if (/Exceeded allowed .*Durable Objects free tier/i.test(error.message || '')) {
+        return json({ error: 'Room service has reached its daily usage limit. It resets at 00:00 UTC. Please try again after the reset.' }, 503);
+      }
       return json({ error: 'Room service unavailable. Please try again.' }, 503);
     }
   }
@@ -55,13 +98,12 @@ export class ChallengeRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.room = null;
-    this.clients = new Set();
     this.queue = Promise.resolve();
     ctx.blockConcurrencyWhile(async () => {
       // Rebuild the complete skyline from persistent metadata and per-tower samples.
       const saved = await ctx.storage.get('room');
       if (!saved) return;
-      this.room = { ...saved, students: new Map(), clients: this.clients, results: [] };
+      this.room = { ...saved, students: new Map(), clients: new Set(), results: [] };
       for (const student of saved.students) {
         student.result = await ctx.storage.get(`result:${student.id}`) || null;
         this.room.students.set(student.id, student);
@@ -93,17 +135,27 @@ export class ChallengeRoom extends DurableObject {
       students: students.map(s => ({ ...s, result: null })), resultOrder: r.results.map(s => s.studentId)
     });
     await this.ctx.storage.setAlarm(r.expiresAt);
-    const payload = new TextEncoder().encode(`data: ${JSON.stringify(publicRoom(r))}\n\n`);
-    for (const client of this.clients) {
-      try { client.enqueue(payload); } catch (_) { this.clients.delete(client); }
+    const payload = JSON.stringify(publicRoom(r));
+    for (const socket of this.ctx.getWebSockets()) {
+      try { socket.send(payload); } catch (_) { /* Closed peers are removed by the runtime. */ }
     }
+  }
+
+  webSocketMessage(socket) {
+    // Room updates are read-only; mutations use authenticated HTTP requests.
+    socket.close(1008, 'Use room controls to make changes.');
+  }
+
+  webSocketClose() {}
+
+  webSocketError(socket) {
+    try { socket.close(1011, 'Room connection closed.'); } catch (_) {}
   }
 
   async alarm() {
     const work = this.queue.then(async () => {
       if (this.room && Date.now() < this.room.expiresAt) return this.ctx.storage.setAlarm(this.room.expiresAt);
-      for (const client of this.clients) try { client.close(); } catch (_) {}
-      this.clients.clear();
+      for (const socket of this.ctx.getWebSockets()) try { socket.close(1000, 'Room expired'); } catch (_) {}
       this.room = null;
       await this.ctx.storage.deleteAll();
     });
@@ -118,7 +170,6 @@ export class ChallengeRoom extends DurableObject {
         if (this.room && this.room.expiresAt > Date.now()) return json({ error: 'Room exists' }, 409);
         const body = await request.json();
         this.room = createRoom(body, url.searchParams.get('code'));
-        this.room.clients = this.clients;
         if (body.preview === true) addPreviewGroups(this.room);
         await this.save();
         return json({ ...publicRoom(this.room), teacherToken: this.room.teacherToken });
@@ -127,21 +178,11 @@ export class ChallengeRoom extends DurableObject {
       if (!room || room.expiresAt <= Date.now()) return json({ error: 'Room not found or expired' }, 404);
       if (url.pathname === '/state' && request.method === 'GET') return json(publicRoom(room));
       if (url.pathname === '/events' && request.method === 'GET') {
-        let controller, heartbeat;
-        const clients = this.clients;
-        const stream = new ReadableStream({
-          start(c) {
-            controller = c;
-            clients.add(c);
-            c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(publicRoom(room))}\n\n`));
-            heartbeat = setInterval(() => {
-              try { c.enqueue(new TextEncoder().encode(': keepalive\n\n')); }
-              catch (_) { clearInterval(heartbeat); clients.delete(c); }
-            }, 20000);
-          },
-          cancel() { clearInterval(heartbeat); clients.delete(controller); }
-        });
-        return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform' } });
+        if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return json({ error: 'WebSocket upgrade required.' }, 426);
+        const [client, server] = Object.values(new WebSocketPair());
+        this.ctx.acceptWebSocket(server);
+        server.send(JSON.stringify(publicRoom(room)));
+        return new Response(null, { status: 101, webSocket: client });
       }
       if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
       if (['/lock', '/unlock', '/start', '/replay', '/delete', '/remove-student', '/blocked-names'].includes(url.pathname) && request.headers.get('X-Teacher-Token') !== room.teacherToken)
@@ -158,11 +199,10 @@ export class ChallengeRoom extends DurableObject {
         await this.ctx.storage.deleteAlarm();
         await this.ctx.storage.deleteAll();
         this.room = null;
-        const payload = new TextEncoder().encode(`data: ${JSON.stringify({ deleted: true, code: room.code })}\n\n`);
-        for (const client of this.clients) {
-          try { client.enqueue(payload); client.close(); } catch (_) {}
+        const payload = JSON.stringify({ deleted: true, code: room.code });
+        for (const socket of this.ctx.getWebSockets()) {
+          try { socket.send(payload); socket.close(1000, 'Room deleted'); } catch (_) {}
         }
-        this.clients.clear();
         return json({ deleted: true, code: room.code });
       }
       if (url.pathname === '/join') {
