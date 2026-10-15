@@ -7,7 +7,7 @@ const physics = require("./public/physics.js");
 const publicDir = path.join(__dirname, "public");
 const rooms = new Map();
 
-const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent } = require("./src/rooms.js");
+const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent } = require("./src/rooms.js");
 const teacherAuth = require("./src/teacher-auth.js");
 
 const mime = {
@@ -191,22 +191,21 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, publicRoom(room));
     }
 
-    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/start$/)) {
+    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/(start|replay)$/)) {
       const room = getRoom(url.pathname.split("/")[3]);
       if (!room) return json(res, 404, { error: "Room not found" });
-      room.phase = "running";
-      scoreRoom(room);
+      if (room.quake?.preparing) return json(res, 200, publicRoom(room));
+      beginQuake(room);
+      const quake = room.quake;
       broadcast(room);
-      return json(res, 200, publicRoom(room));
-    }
-
-    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/replay$/)) {
-      const room = getRoom(url.pathname.split("/")[3]);
-      if (!room) return json(res, 404, { error: "Room not found" });
-      room.phase = "running";
-      scoreRoom(room);
-      broadcast(room);
-      return json(res, 200, publicRoom(room));
+      json(res, 200, publicRoom(room));
+      // Yield a network turn so the alert reaches browsers before CPU work.
+      setTimeout(() => {
+        if (getRoom(room.code) !== room || room.quake !== quake || !quake.preparing) return;
+        scoreRoom(room);
+        broadcast(room);
+      }, 50);
+      return;
     }
 
     let filePath = path.normalize(path.join(publicDir, url.pathname === "/" ? "index.html" : url.pathname));

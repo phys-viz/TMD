@@ -14,6 +14,7 @@ let currentStudent = null;
 let events = null;
 let teacherUnlocked = false;
 let creatingRoom = false;
+let startingQuake = false;
 let cityStart = 0;
 let lastCityStartedAt = 0;
 let lastStudentQuake = "";
@@ -984,7 +985,7 @@ function renderRoom() {
   }[phase] || {};
   for (const id of ["lockBtn", "startBtn", "replayBtn", "unlockBtn"]) {
     $(id).hidden = !controls[id];
-    $(id).disabled = !teacher || !controls[id];
+    $(id).disabled = !teacher || !controls[id] || startingQuake || (id === "replayBtn" && !!currentRoom.quake?.preparing);
     $(id).className = `button-${controls[id] || "secondary"}`;
   }
   $("deleteRoomBtn").disabled = !teacher;
@@ -1015,7 +1016,7 @@ function renderRoom() {
   }
   currentStudent = latest;
   const studentQuake = phase === "running" && currentRoom.quake?.startedAt
-    ? `${currentRoom.code}:${currentRoom.quake.startedAt}` : "";
+    ? `${currentRoom.code}:${currentRoom.quake.id || currentRoom.quake.startedAt}` : "";
   if (studentQuake && studentQuake !== lastStudentQuake) {
     lastStudentQuake = studentQuake;
     setView("city");
@@ -1102,14 +1103,17 @@ function renderCity() {
   const t = currentRoom.phase === "running" ? Math.min(Math.max(0, (performance.now() - cityStart) / 1000), (pulse?.runDuration || RUN_DURATION) + 3.6) : 0;
   const running = currentRoom.phase === "running" && !!pulse;
   const remaining = running ? Math.max(0, (cityStart - performance.now()) / 1000) : 0;
-  const intro = remaining > 0;
+  const preparing = pulse?.preparing === true;
+  const intro = startingQuake || preparing || remaining > 0;
   $("quakeIntro").hidden = !intro;
   canvas.hidden = intro;
-  $("cityResults").hidden = running && (intro || t < (pulse.runDuration || RUN_DURATION) + 3.6);
+  $("cityResults").hidden = intro || (running && t < (pulse.runDuration || RUN_DURATION) + 3.6);
   $("skipResultsBtn").hidden = !running || intro || t >= (pulse.runDuration || RUN_DURATION) + 3.6;
   if (intro) {
-    playQuakeWarning(pulse.startedAt);
-    $("quakeCountdown").textContent = `Brace your buildings — skyline in ${Math.ceil(remaining)}!`;
+    if (!startingQuake && pulse) playQuakeWarning(pulse.id || pulse.startedAt);
+    $("quakeCountdown").textContent = startingQuake ? "Sending earthquake alert…"
+      : preparing && remaining <= 0 ? "Preparing city…"
+      : `Brace your buildings — skyline in ${Math.ceil(remaining)}!`;
     $("quakeBadge").textContent = "Epicenter: Morristown, NJ";
     $("cityCaption").textContent = "Incoming classroom quake!";
     return;
@@ -1513,18 +1517,27 @@ $("roster").addEventListener("click", async event => {
   } catch (error) { $("teacherRoomStatus").textContent = error.message; button.disabled = false; }
 });
 async function runQuake(action) {
-  if (!currentRoom) return;
+  if (!currentRoom || startingQuake || currentRoom.quake?.preparing) return;
+  const previousView = document.querySelector(".view.active")?.id || "teacher";
+  startingQuake = true;
   prepareQuakeAudio();
-  try {
-    currentRoom = await api(`/api/rooms/${currentRoom.code}/${action}`);
-  } catch (error) {
-    $("teacherRoomStatus").textContent = error.message;
-    return;
-  }
-  cityStart = currentRoom.quake?.startedAt ? performance.now() - (Date.now() - currentRoom.quake.startedAt) : performance.now();
   setView("city");
+  window.scrollTo?.(0, 0);
   renderRoom();
   renderCity();
+  try {
+    const room = await api(`/api/rooms/${currentRoom.code}/${action}`);
+    // A completed SSE update can overtake the initial HTTP response.
+    if (!(room.quake?.preparing && currentRoom?.quake?.id === room.quake.id && currentRoom.quake.preparing === false)) currentRoom = room;
+    $("teacherRoomStatus").textContent = "";
+  } catch (error) {
+    $("teacherRoomStatus").textContent = error.message;
+    setView(previousView);
+  } finally {
+    startingQuake = false;
+    renderRoom();
+    renderCity();
+  }
 }
 $("startBtn").addEventListener("click", () => runQuake("start"));
 // Scores are computed when the quake starts, so skipping only fast-forwards the animation.

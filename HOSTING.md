@@ -28,6 +28,7 @@ You can skip login if Wrangler is already signed into the correct account. Deplo
 - Students rejoin with the room code in the same browser; their private token preserves the assignment and submission. Use anonymous pair names.
 - Rooms and per-tower scoring samples are saved and survive Worker restarts and redeployments. Rooms expire after 24 hours.
 - Browsers receive server-sent events with heartbeats and automatic reconnection. The hosted Worker bridges those streams to hibernatable WebSockets in the room Durable Object. Browser keepalives run in the Worker, so idle rooms can sleep while clients stay connected. Node development continues to use its existing SSE server. Test live updates on the actual school network.
+- Start and Replay persist and broadcast the alert before scoring. A one-time room alarm prepares the results during the countdown; pending jobs survive room hibernation/restart. Once scores are ready, the room returns to its 24-hour expiration alarm. Slow preparation holds the map with “Preparing city…” and adjusts the common shaking start time; no recurring preparation timer is used. See the [Cloudflare Alarms API](https://developers.cloudflare.com/durable-objects/api/alarms/).
 - Challenge mass is entered as 1–10%, matching Solo Lab. Damping starts at zero. Different preview designs intentionally retain their varied damping values.
 
 ## Pilot rehearsal
@@ -36,7 +37,7 @@ You can skip login if Wrangler is already signed into the correct account. Deplo
 2. Create a room; join and recreate assigned dimensions in Solo Lab.
 3. Submit, revise, refresh, and reconnect. Check both assignment and submission.
 4. From a student browser, verify teacher actions are unavailable.
-5. Lock and start. Verify that joined student tabs switch immediately to City for the ten-second alert, followed by sound, synchronized City motion, and the completed rubble ending.
+5. Lock and start. Verify that the teacher's map appears before the Start request finishes and joined student tabs switch to City before scores arrive. Check the shared countdown, a “Preparing city…” hold if needed, sound, synchronized City motion, and the completed rubble ending.
 6. Test Replay and a second room. Note confusing inputs and connection problems.
 7. Run the 12-pair preview before the full launch.
 

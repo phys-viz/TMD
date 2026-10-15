@@ -458,6 +458,17 @@ const failureTitle = rubbleDrawing.find(d => d.method === "fillText" && d.args[0
 assert.deepEqual(failureTitle.args, ["FAILED", dom.stage.width / 2, dom.stage.height / 2], "failure title is centered in the tower view");
 assert.equal(failureTitle.font, "bold 52px system-ui", "failure title is large enough to stand out");
 // Intro, ground shaking, settling, and aftermath follow a single shared clock.
+vm.runInContext(`currentRoom.phase = "running"; currentRoom.quake = { id: "slow-preparation", preparing: true, startedAt: Date.now() - 1000, duration: 3, runDuration: 20 }; renderCity()`, app);
+assert.equal(dom.quakeIntro.hidden, false, "slow scoring keeps the map visible after the countdown");
+assert.equal(dom.quakeCountdown.textContent, "Preparing city…");
+assert.equal(dom.cityCanvas.hidden, true, "unscored towers never start shaking");
+assert.equal(dom.cityResults.hidden, true, "unscored results stay hidden");
+assert.equal(dom.skipResultsBtn.hidden, true, "preparation cannot be skipped");
+vm.runInContext("currentRoom.quake.preparing = false; currentRoom.quake.startedAt = Date.now() + 2000; renderCity()", app);
+assert.equal(dom.quakeIntro.hidden, false, "a slow preparation gets a shared lead-in before shaking");
+clock = vm.runInContext("cityStart", app) + 100;
+vm.runInContext("renderCity()", app);
+assert.equal(dom.quakeIntro.hidden, true, "the prepared skyline begins at its revised shared start time");
 const sequenceStart = clock;
 app.quakeScheduledAt = Date.now() + 10000;
 vm.runInContext(`currentRoom.phase = "running"; currentRoom.quake = { startedAt: quakeScheduledAt, duration: 3, runDuration: 20, difficulty: "medium", amplitude: .62 }; renderCity()`, app);
@@ -586,13 +597,17 @@ for (const damping of [0, .25, 1]) {
   assert.equal(dom.submitLength.value, '8.40', "locked controls show the saved design");
   vm.runInContext("setView('lab')", app);
   room.phase = 'running';
-  room.quake = { startedAt: Date.now() + 10000 };
+  room.quake = { id: 'student-quake-1', preparing: true, startedAt: Date.now() + 10000 };
   app.renderRoom();
   assert(dom.city.classList.contains('active'), "students switch to City immediately during the quake countdown");
   vm.runInContext("setView('student')", app);
   app.renderRoom();
   assert(dom.student.classList.contains('active'), "repeated room updates let students stay on a tab they chose");
+  room.quake.preparing = false;
   room.quake.startedAt += 20000;
+  app.renderRoom();
+  assert(dom.student.classList.contains('active'), "ready notifications for the same quake do not redirect students again");
+  room.quake.id = 'student-quake-2';
   app.renderRoom();
   assert(dom.city.classList.contains('active'), "a new replay brings students back to City");
   vm.runInContext("lastStudentQuake = ''; setView('student')", app);
@@ -709,6 +724,27 @@ for (const damping of [0, .25, 1]) {
   assert.equal(saved.has('tmd-teacher-OLDER2'), false, "deleted room disappears from saved rooms");
   assert.equal(saved.has('tmd-teacher-NEWER2'), true, "other saved rooms remain accessible");
   assert.equal(dom.deleteRoomBtn.disabled, true);
+
+  vm.runInContext("currentRoom = testRoom; currentStudent = null; setView('teacher')", app);
+  let finishStart, startCalls = 0;
+  app.api = () => { startCalls++; return new Promise(resolve => { finishStart = resolve; }); };
+  const starting = app.runQuake('start');
+  assert(dom.city.classList.contains('active') && !dom.quakeIntro.hidden, "the teacher sees the map before the Start response arrives");
+  assert.equal(dom.quakeCountdown.textContent, 'Sending earthquake alert…');
+  assert.equal(dom.cityResults.hidden, true);
+  await app.runQuake('start');
+  assert.equal(startCalls, 1, "double clicks cannot start two preparation jobs");
+  app.readyRoom = { ...room, phase: 'running', quake: { id: 'fast-ready', preparing: false, startedAt: Date.now() + 10000 } };
+  vm.runInContext("currentRoom = readyRoom", app);
+  finishStart({ ...app.readyRoom, quake: { ...app.readyRoom.quake, preparing: true } });
+  await starting;
+  assert.equal(vm.runInContext('currentRoom.quake.preparing', app), false, "an older HTTP response cannot overwrite completed SSE results");
+  vm.runInContext("currentRoom = testRoom; setView('teacher')", app);
+  app.api = async () => { throw new Error('Start unavailable'); };
+  await app.runQuake('start');
+  assert(dom.teacher.classList.contains('active'), "a rejected Start returns the teacher to the controls");
+  assert.equal(dom.teacherRoomStatus.textContent, 'Start unavailable');
+  assert.equal(vm.runInContext('startingQuake', app), false, "failed starts can be retried");
 
   const entry = (nickname, status, damping, extra = {}) => ({ nickname, submission: damping == null ? { enabled: false } : { enabled: true, massRatio: 0.04, damping }, result: { status, failureTime: status === "failed" ? extra.failureTime : null, overLimitTime: 0, peakSway: 0.3, relativeSettleTime: 10, settleTime: 10 } });
   const boardResults = [entry("Late fall", "failed", 0.1, { failureTime: 40 }), entry("Bare", "standing", null), entry("B", "standing", 0.2), entry("Early fall", "failed", 0, { failureTime: 5 }), entry("A", "standing", 0.2), entry("C", "standing", 0.5)];

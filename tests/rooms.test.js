@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const P = require('../public/physics.js');
+const { createRoom, ensureStudent, beginQuake, scoreRoom } = require('../src/rooms.js');
 const teacherPassword = process.env.TEACHER_PASSWORD || "local-test-password";
 let teacherCookie = "";
 const baseUrl = process.env.TMD_TEST_URL || 'http://localhost:3197';
@@ -32,11 +33,11 @@ async function roomEvents(code) {
     }
   }
   return {
-    async next(predicate = () => true) {
+    async next(predicate = () => true, timeoutMs = 5000) {
       let timer;
       try {
         return await Promise.race([readMatching(predicate), new Promise((_, reject) => {
-          timer = setTimeout(() => { controller.abort(); reject(new Error('Timed out waiting for a room update')); }, 5000);
+          timer = setTimeout(() => { controller.abort(); reject(new Error('Timed out waiting for a room update')); }, timeoutMs);
         })]);
       } finally { clearTimeout(timer); }
     },
@@ -49,6 +50,24 @@ async function post(path, body) {
   const data = await response.json();
   if (data.teacherToken) teacherKeys.set(data.code, data.teacherToken);
   return data;
+}
+async function startRun(path) {
+  const code = path.split('/')[3];
+  const events = await roomEvents(code);
+  try {
+    await events.next();
+    const pending = await post(path);
+    assert.equal(pending.phase, 'running');
+    assert.equal(pending.quake.preparing, true, 'Start responds before the calculations');
+    assert.deepEqual(pending.results, [], 'the announcement never includes stale results');
+    assert(pending.students.every(student => student.result === null));
+    const announced = await events.next(room => room.quake?.id === pending.quake.id && room.quake.preparing);
+    assert.equal(announced.quake.startedAt, pending.quake.startedAt, 'connected clients receive the initial countdown before scores');
+    const ready = await events.next(room => room.quake?.id === pending.quake.id && !room.quake.preparing, 20000);
+    assert(ready.quake.startedAt >= announced.quake.startedAt, 'preparation cannot shorten the announced countdown');
+    assert(ready.students.every(student => student.result), 'the skyline is released only with complete results');
+    return ready;
+  } finally { events.close(); }
 }
 (async () => {
   try {
@@ -96,14 +115,15 @@ async function post(path, body) {
     assert.equal(forbidden.status, 403, "room codes do not grant teacher controls");
     const snapshot = await (await fetch(`${baseUrl}/api/rooms/${room.code}`)).json();
     assert.equal(snapshot.teacherToken, undefined, "public state does not expose the teacher key");
-    const started = await post(`/api/rooms/${room.code}/start`);
+    const started = await startRun(`/api/rooms/${room.code}/start`);
     assert.equal(started.results.length, 12);
     assert.equal(started.quake.introDurationMs, 10000);
     assert(started.quake.startedAt > Date.now(), "the intro finishes before the simulation clock begins");
     assert(started.results.some(r => r.result.status === 'standing'));
     assert(started.results.some(r => r.result.status === 'failed'));
     assert(started.results.every(r => r.result.relativeSettleTime >= 3 && r.result.relativeSettleTime <= 20), "each tower gets a settle time relative to its own peak");
-    const replay = await post(`/api/rooms/${room.code}/replay`);
+    const replay = await startRun(`/api/rooms/${room.code}/replay`);
+    assert.notEqual(replay.quake.id, started.quake.id, 'replay announces a distinct quake');
     assert.deepEqual(replay.results, started.results);
     const blockedUnlock = await fetch(`${baseUrl}/api/rooms/${room.code}/unlock`, { method: 'POST' });
     assert.equal(blockedUnlock.status, 403, "students cannot unlock rooms");
@@ -146,12 +166,12 @@ async function post(path, body) {
       token: joined.token, submission: { enabled: true, length: 8.4, massRatio: .06, damping: .2 }
     });
     assert.equal(revised.student.submission.damping, .2, "unlock permits revisions");
-    const firstRun = await post(`/api/rooms/${regular.code}/start`);
+    const firstRun = await startRun(`/api/rooms/${regular.code}/start`);
     const originalResult = firstRun.students.find(s => s.id === joined.student.id).result;
     await post(`/api/rooms/${regular.code}/unlock`);
     const revision = { enabled: true, length: 17.7, massRatio: .1, damping: 1 };
     await post(`/api/rooms/${regular.code}/submit`, { token: joined.token, submission: revision });
-    const nextRun = await post(`/api/rooms/${regular.code}/replay`);
+    const nextRun = await startRun(`/api/rooms/${regular.code}/replay`);
     const updated = nextRun.students.find(s => s.id === joined.student.id);
     assert.equal(updated.submission.length, 17.7);
     assert.equal(updated.submission.damping, 1);
@@ -178,7 +198,7 @@ async function post(path, body) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId: joined.student.id })
     });
     assert.equal(protectedRemoval.status, 403, "students cannot remove groups");
-    const testedRoom = await post(`/api/rooms/${regular.code}/start`);
+    const testedRoom = await startRun(`/api/rooms/${regular.code}/start`);
     const unsubmitted = testedRoom.students.find(s => s.nickname === 'Pair C');
     assert.equal(unsubmitted.submission, null, "testing does not mark groups without a design as submitted");
     assert(unsubmitted.result, "groups without a design are still tested");
@@ -260,6 +280,29 @@ async function post(path, body) {
       assert.equal((await teacherEvents.next(room => room.deleted)).code, live.code, 'deletion reaches the teacher stream before it closes');
       assert.equal((await studentEvents.next(room => room.deleted)).code, live.code, 'deletion reaches student streams before they close');
     } finally { teacherEvents.close(); studentEvents?.close(); }
+    const cancelled = await post('/api/rooms', { seed: 'cancel-preparation', runDuration: 20 });
+    await post(`/api/rooms/${cancelled.code}/join`, { nickname: 'Cancel Pair' });
+    await post(`/api/rooms/${cancelled.code}/start`);
+    await post(`/api/rooms/${cancelled.code}/unlock`);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const afterCancel = await (await fetch(`${baseUrl}/api/rooms/${cancelled.code}`)).json();
+    assert.equal(afterCancel.phase, 'design');
+    assert.equal(afterCancel.quake, null, 'an old preparation job cannot restore a cancelled quake');
+    assert.deepEqual(afterCancel.results, []);
+    await post(`/api/rooms/${cancelled.code}/delete`);
+
+    const slow = createRoom({ seed: 'slow-scoring-clock', runDuration: 20 });
+    ensureStudent(slow, { nickname: 'Slow Pair' });
+    beginQuake(slow);
+    const { id, startedAt } = slow.quake;
+    const realNow = Date.now;
+    try {
+      Date.now = () => startedAt + 5000;
+      scoreRoom(slow);
+    } finally { Date.now = realNow; }
+    assert.equal(slow.quake.id, id, 'scoring preserves the announced quake identity');
+    assert.equal(slow.quake.preparing, false);
+    assert(slow.quake.startedAt >= startedAt + 7000, 'scoring that exceeds the countdown grants a shared two-second lead-in');
     console.log('Class preview API tests passed.');
   } finally { server?.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

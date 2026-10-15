@@ -24,6 +24,8 @@ Open the Teacher tab, choose earthquake settings, and click **Preview 12-pair cl
 
 Joined students switch to City automatically when the teacher starts or replays a quake, including the alert countdown. The cartoon map uses simplified [U.S. Census state outlines](https://tigerweb.geo.census.gov/arcgis/rest/services/Generalized_ACS2025/State_County/MapServer/9), with New Jersey highlighted and the Morristown callout separated from the Atlantic Ocean label. All map assets are served locally.
 
+Start opens the teacher's alert immediately and announces the quake to students before calculating scores. The server prepares the skyline during the shared ten-second countdown. If preparation runs longer, the map holds with “Preparing city…”; completed results receive a shared two-second lead-in when needed. The hosted backend uses a one-time persistent alarm for this work, then returns to its normal expiration alarm, preserving idle-room hibernation. Replay uses the same sequence.
+
 Each leaderboard displays its own metric: settling time (s), danger time (s), TMD mass (% of tower mass), or damping. Easy uses peak sway (m) instead of danger time. Collapsed towers retain those metrics with a separate “Collapsed” status; bare towers show “No TMD” on mass/damping boards. Only surviving eligible designs receive medals; failed towers remain at the bottom, ordered by survival time.
 
 ## Test

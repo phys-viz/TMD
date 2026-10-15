@@ -3,7 +3,7 @@ import rules from './rooms.js';
 import physics from '../public/physics.js';
 import teacherAuth from './teacher-auth.js';
 
-const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent } = rules;
+const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent } = rules;
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode() {
@@ -105,7 +105,7 @@ export class ChallengeRoom extends DurableObject {
       if (!saved) return;
       this.room = { ...saved, students: new Map(), clients: new Set(), results: [] };
       for (const student of saved.students) {
-        student.result = await ctx.storage.get(`result:${student.id}`) || null;
+        student.result = saved.quake?.preparing ? null : await ctx.storage.get(`result:${student.id}`) || null;
         this.room.students.set(student.id, student);
       }
       this.room.results = (saved.resultOrder || []).map(id => {
@@ -125,7 +125,9 @@ export class ChallengeRoom extends DurableObject {
     const r = this.room;
     const students = Array.from(r.students.values());
     // Samples are saved per tower so a whole room never exceeds the storage value limit.
-    for (const student of students) {
+    // The preparing announcement contains no scores; leave old samples alone
+    // until the new scores replace them, keeping this first update small.
+    for (const student of r.quake?.preparing ? [] : students) {
       if (student.result) await this.ctx.storage.put(`result:${student.id}`, student.result);
       else await this.ctx.storage.delete(`result:${student.id}`);
     }
@@ -134,7 +136,7 @@ export class ChallengeRoom extends DurableObject {
       phase: r.phase, preview: r.preview || false, config: r.config, quake: r.quake, nextStudentIndex: r.nextStudentIndex, blockedNames: r.blockedNames || [],
       students: students.map(s => ({ ...s, result: null })), resultOrder: r.results.map(s => s.studentId)
     });
-    await this.ctx.storage.setAlarm(r.expiresAt);
+    await this.ctx.storage.setAlarm(r.quake?.preparing ? Date.now() + 50 : r.expiresAt);
     const payload = JSON.stringify(publicRoom(r));
     for (const socket of this.ctx.getWebSockets()) {
       try { socket.send(payload); } catch (_) { /* Closed peers are removed by the runtime. */ }
@@ -154,6 +156,17 @@ export class ChallengeRoom extends DurableObject {
 
   async alarm() {
     const work = this.queue.then(async () => {
+      if (this.room?.quake?.preparing && this.room.expiresAt > Date.now()) {
+        try {
+          scoreRoom(this.room);
+          await this.save();
+        } catch (error) {
+          // Retain the pending state so an alarm retry can finish this quake.
+          this.room.quake.preparing = true;
+          throw error;
+        }
+        return;
+      }
       if (this.room && Date.now() < this.room.expiresAt) return this.ctx.storage.setAlarm(this.room.expiresAt);
       for (const socket of this.ctx.getWebSockets()) try { socket.close(1000, 'Room expired'); } catch (_) {}
       this.room = null;
@@ -236,10 +249,9 @@ export class ChallengeRoom extends DurableObject {
         room.results = [];
         for (const student of room.students.values()) student.result = null;
       }
-      else if (url.pathname === '/start') { room.phase = 'running'; scoreRoom(room); }
-      else if (url.pathname === '/replay') {
-        room.phase = 'running';
-        scoreRoom(room);
+      else if (url.pathname === '/start' || url.pathname === '/replay') {
+        if (room.quake?.preparing) return json(publicRoom(room));
+        beginQuake(room);
       } else return json({ error: 'Action not found' }, 404);
       await this.save();
       return json(publicRoom(room));

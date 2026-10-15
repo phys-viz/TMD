@@ -165,9 +165,14 @@ function ensureStudent(room, body) {
   return student;
 }
 
-function scoreRoom(room) {
+function beginQuake(room) {
   const difficulty = difficultySettings[room.config.difficulty] || difficultySettings.medium;
+  room.phase = "running";
+  room.results = [];
+  for (const student of room.students.values()) student.result = null;
   room.quake = {
+    id: crypto.randomUUID(),
+    preparing: true,
     amplitude: room.config.amplitude,
     duration: room.config.pulseDuration,
     difficulty: difficulty.difficulty,
@@ -179,6 +184,10 @@ function scoreRoom(room) {
     introDurationMs: 10000,
     startedAt: Date.now() + 10000
   };
+}
+
+function scoreRoom(room) {
+  if (!room.quake?.preparing) beginQuake(room);
   room.results = Array.from(room.students.values()).map(student => {
     // Groups without a submission are tested without a TMD but stay "not submitted".
     const submission = student.submission || { enabled: false };
@@ -189,7 +198,10 @@ function scoreRoom(room) {
     if (a.result.status !== b.result.status) return a.result.status === "standing" ? -1 : 1;
     return a.result.settleTime - b.result.settleTime || a.result.hits - b.result.hits || a.result.peakSway - b.result.peakSway;
   });
-  room.quake.startedAt = Date.now() + room.quake.introDurationMs;
+  // Preserve the countdown announced before scoring. Slow preparation gets a
+  // short synchronized lead-in rather than revealing a half-finished skyline.
+  room.quake.startedAt = Math.max(room.quake.startedAt, Date.now() + 2000);
+  room.quake.preparing = false;
 }
 
 function removeStudent(room, id) {
@@ -201,4 +213,4 @@ function removeStudent(room, id) {
 }
 
 
-module.exports = { maxGroups, isBlockedName, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, scoreRoom, removeStudent };
+module.exports = { maxGroups, isBlockedName, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent };
