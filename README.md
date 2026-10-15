@@ -22,6 +22,10 @@ http://localhost:3000
 
 Open the Teacher tab, choose earthquake settings, and click **Preview 12-pair class**. This creates a separate demo room with 12 submitted pair designs, ranging from tuned TMDs to mistuned, loose, locked, and bare towers. Click **Start earthquake** for a 10-second cartoon Morristown earthquake alert with expanding ripples and a short warning siren (toggle Sound on/off in City), followed by city shaking, settling, and the final aftermath/results. **Replay** repeats the whole sequence. No student logins are needed. City towers share the student simulation renderer, including glass bodies, teal roofs, pendulums, hydraulic dampers, and animated collapse that finishes in ground-level rubble, with tower heights scaled for the skyline.
 
+Joined students switch to City automatically when the teacher starts or replays a quake, including the alert countdown. The cartoon map uses simplified [U.S. Census state outlines](https://tigerweb.geo.census.gov/arcgis/rest/services/Generalized_ACS2025/State_County/MapServer/9), with New Jersey highlighted and the Morristown callout separated from the Atlantic Ocean label. All map assets are served locally.
+
+Each leaderboard displays its own metric: settling time (s), danger time (s), TMD mass (% of tower mass), or damping. Easy uses peak sway (m) instead of danger time. Collapsed towers retain those metrics with a separate “Collapsed” status; bare towers show “No TMD” on mass/damping boards. Only surviving eligible designs receive medals; failed towers remain at the bottom, ordered by survival time.
+
 ## Test
 
 ```bash

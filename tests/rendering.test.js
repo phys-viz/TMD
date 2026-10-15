@@ -584,6 +584,26 @@ for (const damping of [0, .25, 1]) {
   assert(dom.studentTower.innerHTML.includes('Pendulum length: 8.40 m') && dom.studentTower.innerHTML.includes('Damping: 0.12'), "saved design spells out parameter names");
   for (const id of ['submitLength', 'submitMass', 'submitDamping', 'submitDesignBtn']) assert.equal(dom[id].disabled, true, "locked room disables student controls");
   assert.equal(dom.submitLength.value, '8.40', "locked controls show the saved design");
+  vm.runInContext("setView('lab')", app);
+  room.phase = 'running';
+  room.quake = { startedAt: Date.now() + 10000 };
+  app.renderRoom();
+  assert(dom.city.classList.contains('active'), "students switch to City immediately during the quake countdown");
+  vm.runInContext("setView('student')", app);
+  app.renderRoom();
+  assert(dom.student.classList.contains('active'), "repeated room updates let students stay on a tab they chose");
+  room.quake.startedAt += 20000;
+  app.renderRoom();
+  assert(dom.city.classList.contains('active'), "a new replay brings students back to City");
+  vm.runInContext("lastStudentQuake = ''; setView('student')", app);
+  app.renderRoom();
+  assert(dom.city.classList.contains('active'), "students joining an already running quake also see City");
+  vm.runInContext("currentStudent = null; setView('lab')", app);
+  room.quake.startedAt += 20000;
+  app.renderRoom();
+  assert(dom.lab.classList.contains('active'), "room updates do not redirect viewers who are not joined students");
+  vm.runInContext("currentStudent = testStudent", app);
+  room.quake = null;
   room.phase = 'design';
   app.renderRoom();
   for (const id of ['submitLength', 'submitMass', 'submitDamping', 'submitDesignBtn']) assert.equal(dom[id].disabled, false, "unlock re-enables student controls");
@@ -698,8 +718,19 @@ for (const damping of [0, .25, 1]) {
   assert.equal(board.find(row => row.r.nickname === "Early fall").kind, "failed", "the lowest damping cannot win if the tower collapsed");
   vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: true });
   assert(dom.survivorBanner.innerHTML.includes("4 of 6 towers survived") && dom.survivorBanner.innerHTML.includes("Late fall"), "banner counts survivors and names collapses");
-  assert(dom.leaderboards.innerHTML.includes("Least time in danger zone") && dom.leaderboards.innerHTML.includes("Collapsed at 40.0 s"));
+  const boards = dom.leaderboards.innerHTML.split('<section class="leaderboard">').slice(1);
+  const fallenRow = board => board.match(/<li class="board-failed">.*?Late fall.*?<\/li>/)[0];
+  assert(boards[1].includes("Least time in danger zone"));
+  for (const [index, metric] of [[0, '10.00 s'], [1, '0.00 s'], [2, '4.0%'], [3, '0.10']]) {
+    const row = fallenRow(boards[index]);
+    assert(row.includes(`class="board-value">${metric}</span>`), "collapsed rows retain each leaderboard's own metric");
+    assert(row.includes('class="board-status">Collapsed</small>'), "collapsed status stays separate from the metric");
+  }
+  assert(!dom.leaderboards.innerHTML.includes('Collapsed at'), "survival time cannot replace the metric on other boards");
+  vm.runInContext("renderLeaderboards", app)([entry("Bare fall", "failed", null, { failureTime: 2 })], { dangerEnabled: true });
+  assert.equal((dom.leaderboards.innerHTML.match(/class="board-value">No TMD/g) || []).length, 2, "failed bare towers have no invented mass or damping");
   vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: false });
   assert(dom.leaderboards.innerHTML.includes("Least peak sway"), "Easy rooms rank peak sway instead of danger time");
+  assert(fallenRow(dom.leaderboards.innerHTML.split('<section class="leaderboard">')[2]).includes('class="board-value">0.30 m</span>'), "Easy failed rows also show peak sway");
   console.log("rendering tests passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });

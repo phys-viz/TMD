@@ -56,6 +56,10 @@ async function post(path, body) {
     const health = await fetch(`${baseUrl}/health`);
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { status: 'ok' });
+    const map = await fetch(`${baseUrl}/east-coast.svg`);
+    assert.equal(map.status, 200);
+    assert(map.headers.get('content-type').startsWith('image/svg+xml'), 'the local map loads as an SVG image');
+    assert((await map.text()).includes('New Jersey'), 'the map includes the highlighted state');
     const blockedCreate = await fetch(`${baseUrl}/api/rooms`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(blockedCreate.status, 403, "students cannot create teacher rooms without the password");
     const wrong = await fetch(`${baseUrl}/api/teacher/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({password: 'wrong-password'}) });

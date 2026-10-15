@@ -587,7 +587,7 @@ th { color: #425160; }
 .quake-alert-sign h2 { margin: 0; font-size: clamp(23px, 4vw, 46px); font-weight: 900; letter-spacing: .04em; }
 .quake-alert-sign p { margin: 6px 0 0; font-weight: 650; }
 .quake-map { display: block; width: 100%; max-height: 55vh; }
-.quake-ripple { transform-box: view-box; transform-origin: 544px 184px; animation: quake-ripple 2.4s ease-out infinite; }
+.quake-ripple { transform-box: fill-box; transform-origin: center; animation: quake-ripple 2.4s ease-out infinite; }
 .ripple-two { animation-delay: -.8s; }
 .ripple-three { animation-delay: -1.6s; }
 .quake-countdown { margin: 16px 0 0; text-align: center; font-size: clamp(18px, 2.5vw, 25px); color: #87352a; font-weight: 800; }
@@ -710,6 +710,7 @@ th { color: #425160; }
 .leaderboard ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .leaderboard li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: .95rem; }
 .leaderboard li.podium { background: #fff6dd; font-weight: 700; }
+.board-status { display: block; font-size: .75rem; font-weight: 400; }
 .board-place { text-align: center; color: #65727c; font-variant-numeric: tabular-nums; }
 .board-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-value { font-variant-numeric: tabular-nums; color: #314b59; }

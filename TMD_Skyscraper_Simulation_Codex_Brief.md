@@ -80,6 +80,10 @@ Use separate labeled panels with strong visual separation: **orange Earthquake**
 
 **Teacher/projector view:** configure scenario seed, design time, earthquake strength, difficulty, run duration, and the existing structural-limit setting. Start, lock, and replay the challenge. Display a shared city skyline and an accessible results table. Show the same ground motion for every tower while applying each tower's declared game sway tolerance.
 
+When the teacher starts or replays an earthquake, switch joined students immediately to City for the alert countdown and skyline. Switch once per quake; ordinary room updates must not override a student's subsequent tab choice. Students joining during a running quake also open City. Use simplified Census state outlines for the cartoon eastern-seaboard map, highlight New Jersey, and center animated ripples on Morristown. Keep the epicenter callout clear of the Atlantic Ocean label, and serve the map locally.
+
+Every City leaderboard displays its named metric for all rows: settling seconds, danger-zone seconds (peak sway in meters on Easy), TMD mass as a percentage of tower mass, and dimensionless damping. Mark collapsed towers separately instead of replacing their metric with survival time. Bare towers show “No TMD” on the mass/damping boards. Preserve survivor-first eligibility and ties; only surviving eligible designs earn medals, with failed towers placed afterward by survival time.
+
 ## Challenge scoring
 
 - Assign tower properties deterministically from the room seed. Use identical design parameters and ground motion for reproducible replay.

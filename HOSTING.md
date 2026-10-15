@@ -36,11 +36,11 @@ You can skip login if Wrangler is already signed into the correct account. Deplo
 2. Create a room; join and recreate assigned dimensions in Solo Lab.
 3. Submit, revise, refresh, and reconnect. Check both assignment and submission.
 4. From a student browser, verify teacher actions are unavailable.
-5. Lock, start, and check the ten-second alert, sound, synchronized City motion, and completed rubble ending.
+5. Lock and start. Verify that joined student tabs switch immediately to City for the ten-second alert, followed by sound, synchronized City motion, and the completed rubble ending.
 6. Test Replay and a second room. Note confusing inputs and connection problems.
 7. Run the 12-pair preview before the full launch.
 
-Leaderboards and the shared five-minute countdown are still proposed features.
+City includes four metric-specific leaderboards with survivor eligibility and a separate collapse status. Verify that the mass board shows percentages, damping shows dimensionless values, and the time/sway boards show their own units for surviving and collapsed towers.
 
 ## Local development
 

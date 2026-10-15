@@ -16,6 +16,7 @@ let teacherUnlocked = false;
 let creatingRoom = false;
 let cityStart = 0;
 let lastCityStartedAt = 0;
+let lastStudentQuake = "";
 let quakeAudio = null;
 let quakeSoundEnabled = true;
 let lastQuakeSoundAt = 0;
@@ -1013,6 +1014,13 @@ function renderRoom() {
     return showJoined(false);
   }
   currentStudent = latest;
+  const studentQuake = phase === "running" && currentRoom.quake?.startedAt
+    ? `${currentRoom.code}:${currentRoom.quake.startedAt}` : "";
+  if (studentQuake && studentQuake !== lastStudentQuake) {
+    lastStudentQuake = studentQuake;
+    setView("city");
+    window.scrollTo?.(0, 0);
+  }
   $("designEntry").hidden = locked;
   if (locked) {
     $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "";
@@ -1190,9 +1198,9 @@ function renderLeaderboards(results, pulse) {
   ];
   const medals = ["🥇", "🥈", "🥉"];
   $("leaderboards").innerHTML = boards.map(board => `<section class="leaderboard"><h3>${board.title}</h3><p>${board.note}</p><ol>${leaderboard(results, board.value, board).map(({ r, place, kind }) => {
-    const label = kind === "failed" ? `Collapsed at ${fmt(r.result.failureTime ?? 0, 1)} s` : kind === "no-tmd" ? "No TMD" : board.show(board.value(r));
+    const label = board.needsTmd && !r.submission?.enabled ? "No TMD" : board.show(board.value(r));
     const mark = kind === "ranked" && place <= 3 ? medals[place - 1] : place;
-    return `<li class="board-${kind}${kind === "ranked" && place <= 3 ? " podium" : ""}"><span class="board-place">${mark}</span><span class="board-name">${escapeHtml(r.nickname)}</span><span class="board-value">${label}</span></li>`;
+    return `<li class="board-${kind}${kind === "ranked" && place <= 3 ? " podium" : ""}"><span class="board-place">${mark}</span><span class="board-name">${escapeHtml(r.nickname)}${kind === "failed" ? '<small class="board-status">Collapsed</small>' : ""}</span><span class="board-value">${label}</span></li>`;
   }).join("")}</ol></section>`).join("");
 }
 
