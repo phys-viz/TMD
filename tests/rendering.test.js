@@ -70,7 +70,7 @@ for (const id of ["stage", "stageCompare", "graph", "graphCompare"]) {
   dom[id].getContext = () => dom[id].ctx;
   dom[id].getBoundingClientRect = () => ({ left: 0, width: dom[id].width });
 }
-for (const id of ["earthquakeStrength", "roomStrength"]) {
+for (const id of ["earthquakeStrength"]) {
   const buttons = ["gentle", "moderate", "strong"].map(strength => {
     const button = domElement();
     button.dataset.strength = strength;
@@ -90,7 +90,6 @@ const difficultyInputs = [...html.matchAll(/<input[^>]+name="difficultyMode"[^>]
   });
   return input;
 });
-const teacherDifficultyInputs = [...html.matchAll(/<input[^>]+name="roomDifficultyMode"[^>]*>/g)].map(match => domElement(match[0]));
 const pageListeners = {};
 let clock = 0;
 const app = vm.createContext({
@@ -98,7 +97,7 @@ const app = vm.createContext({
   document: {
     getElementById: id => dom[id],
     querySelectorAll: selector => selector === 'input[name="difficultyMode"]' ? difficultyInputs
-      : selector === 'input[name="roomDifficultyMode"]' ? teacherDifficultyInputs : [],
+      : [],
     querySelector: () => ({ value: difficulty })
   },
   performance: { now: () => clock }, requestAnimationFrame() {},
@@ -124,10 +123,10 @@ const state = () => vm.runInContext("sim", app);
 assert.equal(state().pulse.difficulty, "easy", "fresh startup overrides restored Medium with Easy");
 assert.equal(dom.showDangerInput.disabled, true, "Easy default disables the danger zone control");
 difficulty = "hard";
-dom.roomDifficulty.value = "medium";
+dom.activeRoomDifficulty.value = "medium";
 pageListeners.pageshow({ persisted: false });
 assert.equal(state().pulse.difficulty, "easy", "Easy also wins over form restoration during page load");
-assert.equal(dom.roomDifficulty.value, "easy", "new teacher setup defaults to Easy");
+assert.equal(dom.activeRoomDifficulty.value, "easy", "new teacher setup defaults to Easy");
 // The remaining danger/geometry checks exercise an explicitly selected Medium trial.
 difficulty = "medium";
 vm.runInContext("resetLab()", app);
@@ -261,6 +260,17 @@ assert(hasTrace("graphCompare", "#0f7b7e"), "Tower A's graph draws its own trace
 assert(!hasTrace("graphCompare", "#245e9b"), "Tower A's graph does not overlay Tower B");
 assert(hasTrace("graph", "#245e9b"), "Tower B's graph draws its own trace");
 assert(!hasTrace("graph", "#0f7b7e"), "Tower B's graph does not overlay Tower A");
+for (const [id, color] of [["stageCompare", "#0f7b7e"], ["stage", "#245e9b"]]) {
+  dom[id].ctx.drawings.length = 0;
+}
+vm.runInContext("renderLab()", app);
+for (const [id, color] of [["stageCompare", "#0f7b7e"], ["stage", "#245e9b"]]) {
+  const roof = dom[id].ctx.drawings.find(d => d.method === "roundRect" && d.args[3] === 18);
+  const badge = dom[id].ctx.drawings.find(d => d.method === "roundRect" && d.args[3] === 28);
+  assert.equal(roof.fillColor, color, "each comparison roof matches its trace identity");
+  assert.equal(badge.fillColor, color, "roof and A/B badge use the same color");
+}
+
 const swayLabel = id => dom[id].ctx.drawings.find(d => d.method === "fillText" && /^\d.* m$/.test(d.args[0])).args[0];
 assert.strictEqual(swayLabel("graphCompare"), swayLabel("graph"), "separate graphs retain matching sway scales");
 for (const id of ["graph", "graphCompare"]) {
@@ -759,10 +769,14 @@ for (const damping of [0, .25, 1]) {
   const saved = new Map([['tmd-teacher-OLDER2', 'old-key'], ['tmd-last-teacher-room', 'OLDER2']]);
   app.localStorage = { get length() { return saved.size; }, key: i => [...saved.keys()][i], getItem: key => saved.get(key) || null, setItem: (key, value) => saved.set(key, value), removeItem: key => saved.delete(key) };
   vm.runInContext('teacherUnlocked = true', app);
-  let createCount = 0;
-  app.api = async () => { createCount++; return { ...room, code: 'NEWER2', teacherToken: 'new-key' }; };
+  let createCount = 0, createdScenario;
+  dom.activeRoomDifficulty.value = 'hard';
+  dom.activeRoomStrength.value = 'strong';
+  app.api = async (_, body) => { createCount++; createdScenario = body; return { ...room, code: 'NEWER2', teacherToken: 'new-key' }; };
   await Promise.all([app.createClassRoom(), app.createClassRoom()]);
   assert.equal(createCount, 1, "double clicks create only one room");
+  assert.equal(createdScenario.difficulty, 'hard', "new rooms use the shared difficulty selector");
+  assert.equal(createdScenario.amplitude, .65, "new rooms use the shared earthquake selector");
   assert(dom.teacherRooms.innerHTML.includes('OLDER2') && dom.teacherRooms.innerHTML.includes('NEWER2'), "previous room keys remain selectable");
   dom.teacherRooms.value = 'OLDER2';
   app.fetch = async () => ({ ok: true, json: async () => ({ ...room, code: 'OLDER2' }) });

@@ -724,7 +724,6 @@ th { color: #425160; }
 #teacher .teacher-gameplay button { min-height: 40px; padding: 8px 16px; font-size: .95rem; border: 1px solid #9aaeb9; box-shadow: none; }
 #teacher .teacher-gameplay .button-primary { background: #245e9b; color: white; border-color: #245e9b; }
 #teacher .teacher-gameplay .button-secondary { background: white; color: #314b59; }
-#roomDifficulty { border-color: var(--section-border); color: var(--section-accent); font-weight: 750; }
 @media (max-width: 600px) {
  .stage-wrap { grid-template-columns: minmax(0, 1fr); }
  .stage-wrap .graph-wrap { grid-column: 1; }
@@ -752,3 +751,9 @@ th { color: #425160; }
 #activeRoomSettingsStatus { margin: 0; font-size: .85rem; }
 .room-settings-notice { margin: 0 0 12px; padding: 10px 14px; background: #e7eff8; border: 1px solid #9eb9d7; border-radius: 6px; color: #203c49; font-weight: 650; }
 .round-settings { color: #314b59; font-weight: 650; }
+
+/* Tower identity colors match the roof, badge, trace and TMD panel. */
+.stage-wrap .tmd-controls { --section-accent: #0f7b7e; --section-border: #0f7b7e; --section-bg: #e3f3f2; }
+.compare-mode #primaryTower .tmd-controls { --section-accent: #245e9b; --section-border: #245e9b; --section-bg: #e1efff; }
+#teacher #roomForm .active-room-settings { margin-top: 16px; }
+#teacher #roomForm #activeRoomSettingsStatus { margin-block: 10px; }

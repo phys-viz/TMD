@@ -126,7 +126,7 @@ function selectedEarthquakeAmplitude(groupId) {
   return EARTHQUAKE_STRENGTHS[strength];
 }
 
-["earthquakeStrength", "roomStrength"].forEach(groupId => {
+["earthquakeStrength"].forEach(groupId => {
   const group = $(groupId);
   group.querySelectorAll("button").forEach(button => {
     button.addEventListener("click", () => {
@@ -414,6 +414,7 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
   const { top, columnWidth, towerWidth } = layout;
   const bottom = options.foundationY ?? layout.bottom;
   const d = run.damper;
+  const towerColor = compareSim && canvasId === "stage" ? "#245e9b" : "#0f7b7e";
 
   if (options.background !== false) {
     const sky = ctx.createLinearGradient(0, 0, 0, h);
@@ -620,7 +621,7 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
   }
 
   drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, bottom, top, false, columnWidth);
-  ctx.fillStyle = "#0f7b7e";
+  ctx.fillStyle = towerColor;
   ctx.save();
   ctx.shadowColor = "rgba(20, 33, 42, .20)";
   ctx.shadowBlur = 14;
@@ -630,7 +631,7 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
   ctx.fill();
   if (compareSim && (canvasId === "stage" || canvasId === "stageCompare")) {
     ctx.save();
-    ctx.fillStyle = canvasId === "stageCompare" ? "#0f7b7e" : "#245e9b";
+    ctx.fillStyle = towerColor;
     ctx.beginPath(); ctx.roundRect(roofX - 15, top - 49, 30, 28, 5); ctx.fill();
     ctx.fillStyle = "white"; ctx.font = "bold 20px system-ui"; ctx.textAlign = "center";
     ctx.fillText(canvasId === "stageCompare" ? "A" : "B", roofX, top - 28);
@@ -983,6 +984,7 @@ function clearDeletedRoom(code) {
     renderCity();
   }
   renderTeacherRooms();
+  renderRoomSettings(teacherUnlocked);
 }
 
 function escapeHtml(str) {
@@ -1007,6 +1009,14 @@ function roomSettingsDirty() {
 }
 
 function renderRoomSettings(teacher) {
+  $("createRoomBtn").disabled = creatingRoom || applyingRoomSettings;
+  $("previewClassBtn").disabled = creatingRoom || applyingRoomSettings;
+  $("applyRoomSettingsBtn").hidden = !currentRoom;
+  if (!currentRoom) {
+    for (const id of ["activeRoomSettings", "activeRoomDifficulty", "activeRoomStrength"]) $(id).disabled = !teacher || creatingRoom;
+    $("activeRoomSettingsStatus").textContent = "Choose difficulty and strength for the new room.";
+    return;
+  }
   const signature = `${currentRoom.config.difficulty}:${currentRoom.config.amplitude}`;
   const editorKey = `${currentRoom.code}:${signature}`;
   if (roomSettingsEditorKey !== editorKey || currentRoom.phase !== "design") {
@@ -1021,7 +1031,7 @@ function renderRoomSettings(teacher) {
     $("roomSettingsNotice").hidden = false;
   }
   lastRoomScenario = { code: currentRoom.code, signature };
-  const editable = teacher && currentRoom.phase === "design" && !applyingRoomSettings && !startingQuake;
+  const editable = teacher && currentRoom.phase === "design" && !applyingRoomSettings && !startingQuake && !creatingRoom;
   for (const id of ["activeRoomSettings", "activeRoomDifficulty", "activeRoomStrength"]) $(id).disabled = !editable;
   const dirty = roomSettingsDirty();
   $("applyRoomSettingsBtn").disabled = !editable || !dirty;
@@ -1035,7 +1045,7 @@ function renderRoomSettings(teacher) {
 }
 
 function renderRoom() {
-  if (!currentRoom) return;
+  if (!currentRoom) return renderRoomSettings(teacherUnlocked);
   const teacher = teacherUnlocked && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
   const phase = currentRoom.phase;
   // Only the controls that make sense in this phase are shown; the next step is the primary one.
@@ -1369,15 +1379,16 @@ $("randomTowerBtn").addEventListener("click", () => {
 async function createClassRoom(preview = false) {
   if (creatingRoom) return;
   creatingRoom = true;
+  renderRoomSettings(teacherUnlocked);
   $("createRoomBtn").disabled = true;
   $("previewClassBtn").disabled = true;
   try {
   currentRoom = await api("/api/rooms", {
     preview,
     seed: $("roomSeed").value,
-    amplitude: selectedEarthquakeAmplitude("roomStrength"),
+    amplitude: EARTHQUAKE_STRENGTHS[$("activeRoomStrength").value],
     pulseDuration: EARTHQUAKE_DURATION,
-    difficulty: $("roomDifficulty").value,
+    difficulty: $("activeRoomDifficulty").value,
     runDuration: Number($("roomRunDuration").value),
     driftLimit: 1.2
   });
@@ -1393,6 +1404,7 @@ async function createClassRoom(preview = false) {
     creatingRoom = false;
     $("createRoomBtn").disabled = false;
     $("previewClassBtn").disabled = false;
+    renderRoom();
   }
 }
 
@@ -1649,12 +1661,15 @@ $("quakeSoundBtn").addEventListener("click", () => {
 
 function resetDifficultyDefaults() {
   // Browsers can restore old radio selections despite the HTML checked attribute.
-  for (const name of ["difficultyMode", "roomDifficultyMode"]) {
+  for (const name of ["difficultyMode"]) {
     document.querySelectorAll(`input[name="${name}"]`).forEach(input => {
       input.checked = input.value === "easy";
     });
   }
-  $("roomDifficulty").value = "easy";
+  if (!currentRoom) {
+    $("activeRoomDifficulty").value = "easy";
+    $("activeRoomStrength").value = "moderate";
+  }
 }
 resetDifficultyDefaults();
 window.addEventListener?.("pageshow", event => {
@@ -1710,7 +1725,3 @@ if (typeof fetch !== "undefined") {
     renderRoom();
   }).catch(() => {});
 }
-
-document.querySelectorAll('input[name="roomDifficultyMode"]').forEach(input => {
-  input.addEventListener("change", () => { if (input.checked) $("roomDifficulty").value = input.value; });
-});

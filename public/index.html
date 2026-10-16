@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-35">
+  <link rel="stylesheet" href="/styles.css?v=classroom-36">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -88,7 +88,7 @@
                 <span id="compareDangerTime" class="sr-only"></span>
               </div>
             </article>
-            <article class="stage-wrap" aria-labelledby="tmdHeading">
+            <article class="stage-wrap" id="primaryTower" aria-labelledby="tmdHeading">
               <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
                 <div class="tmd-settings-row">
                   <h3 id="tmdHeading">Tower</h3>
@@ -162,28 +162,17 @@
     <section id="teacher" class="view">
       <div class="two-col teacher-layout">
         <form id="roomForm" class="panel">
-          <h2>New room setup</h2>
-          <p class="section-intro">Create a room for your groups. Use Next round settings in the dashboard to revise an existing room.</p>
-          <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
-          <div class="control-block earthquake-controls" role="group" aria-labelledby="teacherEarthquakeHeading">
-          <h3 id="teacherEarthquakeHeading">Earthquake</h3>
-          <div id="roomStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
-              <button type="button" data-strength="gentle" aria-pressed="false">Gentle</button>
-              <button type="button" data-strength="moderate" aria-pressed="true">Moderate</button>
-              <button type="button" data-strength="strong" aria-pressed="false">Strong</button>
-            </div>
-          <p class="muted">Ground shaking lasts 3.0 seconds.</p>
-          </div>
-          <div class="control-block difficulty-controls" role="group" aria-labelledby="teacherDifficultyHeading">
-          <h3 id="teacherDifficultyHeading">Difficulty</h3>
-          <div class="mode-row" aria-label="Room difficulty mode">
-            <label><input type="radio" name="roomDifficultyMode" value="easy" checked> Easy</label>
-            <label><input type="radio" name="roomDifficultyMode" value="medium"> Medium</label>
-            <label><input type="radio" name="roomDifficultyMode" value="hard"> Hard</label>
-          </div>
-          <select id="roomDifficulty" hidden aria-label="Room difficulty"><option value="easy" selected>Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
-          </div>
-          <label>Run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
+          <h2>Room setup</h2>
+          <p class="section-intro">Use these settings to create a room or revise the open room while unlocked.</p>
+          <fieldset id="activeRoomSettings" class="active-room-settings" disabled>
+            <legend>Earthquake and difficulty</legend>
+            <label>Difficulty<select id="activeRoomDifficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
+            <label>Earthquake strength<select id="activeRoomStrength"><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
+            <button id="applyRoomSettingsBtn" class="button-secondary" type="button" hidden>Apply settings</button>
+          </fieldset>
+          <p id="activeRoomSettingsStatus" class="muted" role="status"></p>
+          <label>New room seed <input id="roomSeed" value="period-window-a"></label>
+          <label>New room run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
           <div class="button-row">
             <button id="createRoomBtn">Create room</button>
             <button id="previewClassBtn" class="button-secondary" type="button">Preview 12-pair class</button>
@@ -204,13 +193,6 @@
           <div class="control-block teacher-gameplay">
           <h3>Earthquake controls</h3>
           <p id="phaseSteps" class="room-phase" role="status"></p>
-          <fieldset id="activeRoomSettings" class="active-room-settings" disabled>
-            <legend>Next round settings</legend>
-            <label>Difficulty<select id="activeRoomDifficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
-            <label>Earthquake strength<select id="activeRoomStrength"><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
-            <button id="applyRoomSettingsBtn" class="button-secondary" type="button">Apply settings</button>
-          </fieldset>
-          <p id="activeRoomSettingsStatus" class="muted" role="status"></p>
           <div class="button-row earthquake-actions">
             <button id="lockBtn" class="button-primary">Lock designs</button>
             <button id="startBtn" class="button-secondary">Start earthquake</button>
@@ -260,6 +242,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-43"></script>
+  <script src="/app.js?v=classroom-44"></script>
 </body>
 </html>

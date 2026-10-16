@@ -38,7 +38,7 @@ You can skip login if Wrangler is already signed into the correct account. Deplo
 3. Submit, revise, refresh, and reconnect. Check both assignment and submission.
 4. From a student browser, verify teacher actions are unavailable.
 5. Lock and start. Verify that the teacher's map appears before the Start request finishes and joined student tabs switch to City before scores arrive. Check the shared countdown, a “Preparing city…” hold if needed, sound, synchronized City motion, and the completed rubble ending.
-6. Test Replay, then Unlock for revisions. Change difficulty and strength using Next round settings and Apply settings. Verify students receive the new scenario without rejoining, their towers and submitted designs stay unchanged, and the next quake uses the applied settings. Verify changes are unavailable while locked or running. Test a second room.
+6. Test Replay, then Unlock for revisions. Change difficulty and strength using the shared Earthquake and difficulty controls in Room setup and Apply settings. Verify students receive the new scenario without rejoining, their towers and submitted designs stay unchanged, and the next quake uses the applied settings. Verify changes are unavailable while locked or running. Test a second room.
 7. Run the 12-pair preview before the full launch.
 
 City includes four metric-specific leaderboards with survivor eligibility and a separate collapse status. Verify that the mass board shows percentages, damping shows dimensionless values, and the time/sway boards show their own units for surviving and collapsed towers.
