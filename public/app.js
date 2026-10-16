@@ -117,7 +117,7 @@ function setView(view) {
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => setView(btn.dataset.view)));
 
 function selectedDifficulty() {
-  const selected = document.querySelector('input[name="difficultyMode"]:checked')?.value || "medium";
+  const selected = document.querySelector('input[name="difficultyMode"]:checked')?.value || "easy";
   return { mode: selected, ...DIFFICULTY[selected] };
 }
 
@@ -206,7 +206,6 @@ function labRuns() {
 }
 
 function updateLabels() {
-  $("labSwayLimit").textContent = fmt(labTower.dangerSwayLimit);
   [["dampingInput", "dampingSlider"], ["compareDampingInput", "compareDampingSlider"]].forEach(([inputId, sliderId]) => {
     const value = P.clamp(Number($(inputId).value), 0, 1);
     $(sliderId).value = value;
@@ -627,8 +626,17 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
   ctx.shadowColor = "rgba(20, 33, 42, .20)";
   ctx.shadowBlur = 14;
   ctx.shadowOffsetY = 5;
-  ctx.roundRect(roofX - towerWidth / 2 - 10, top - 15, towerWidth + 20, 18, 3);
+  ctx.roundRect(roofX - towerWidth / 2, top - 15, towerWidth, 18, 3);
   ctx.fill();
+  if (compareSim && (canvasId === "stage" || canvasId === "stageCompare")) {
+    ctx.save();
+    ctx.fillStyle = canvasId === "stageCompare" ? "#0f7b7e" : "#245e9b";
+    ctx.beginPath(); ctx.roundRect(roofX - 15, top - 49, 30, 28, 5); ctx.fill();
+    ctx.fillStyle = "white"; ctx.font = "bold 20px system-ui"; ctx.textAlign = "center";
+    ctx.fillText(canvasId === "stageCompare" ? "A" : "B", roofX, top - 28);
+    ctx.restore();
+  }
+
   ctx.restore();
 
   if (d.enabled && (!run.failed || showContact)) {
@@ -741,7 +749,7 @@ function drawGraph(run = sim, comparison = false, maxY = graphSwayScale()) {
   const w = canvas.width;
   const h = canvas.height;
   const traces = [{ run, color: comparison || !compareSim ? "#0f7b7e" : "#245e9b", dash: [] }];
-  const plot = { left: 48, right: w - 18, top: 14, bottom: h - 36 };
+  const plot = { left: 72, right: w - 18, top: 14, bottom: h - 36 };
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = "#f8fbfc";
   ctx.fillRect(0, 0, w, h);
@@ -802,13 +810,14 @@ function drawGraph(run = sim, comparison = false, maxY = graphSwayScale()) {
     }
   });
   ctx.fillStyle = "#425160";
-  ctx.font = "13px system-ui";
+  ctx.font = "bold 13px system-ui";
   ctx.fillText(`${fmt(maxY)} m`, 6, plot.top + 4);
   ctx.fillText(`-${fmt(maxY)} m`, 6, plot.bottom);
   ctx.save();
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("sway", 6, (plot.top + plot.bottom) / 2);
+  ctx.fillText("Building", 6, (plot.top + plot.bottom) / 2 - 9);
+  ctx.fillText("sway (m)", 6, (plot.top + plot.bottom) / 2 + 9);
   ctx.restore();
   if (run.failed) {
     ctx.fillStyle = "#b63030";
@@ -1266,7 +1275,7 @@ $("resetBtn").addEventListener("click", () => resetLab());
     const rect = canvas.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width * canvas.width;
     const { start: tMin, end: tMax } = graphRange(comparison);
-    const left = 48;
+    const left = 72;
     const right = canvas.width - 18;
     const t = tMin + P.clamp((x - left) / (right - left), 0, 1) * Math.max(0.5, tMax - tMin);
     let cursors = comparison ? compareGraphCursors : graphCursors;
@@ -1606,3 +1615,7 @@ if (typeof fetch !== "undefined") {
     renderRoom();
   }).catch(() => {});
 }
+
+document.querySelectorAll('input[name="roomDifficultyMode"]').forEach(input => {
+  input.addEventListener("change", () => { if (input.checked) $("roomDifficulty").value = input.value; });
+});

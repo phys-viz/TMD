@@ -477,7 +477,7 @@ canvas {
   font-weight: 500;
   color: #425160;
 }
-.axis-start { left: 8.57%; }
+.axis-start { left: 12.86%; }
 .axis-end { right: 3.21%; }
 .axis-time input {
   width: 4.7em;
@@ -517,7 +517,7 @@ canvas {
   width: 100%;
   max-width: 560px;
   height: auto;
-  aspect-ratio: 560 / 170;
+  aspect-ratio: 560 / 210;
 }
 
 #cityCanvas {
@@ -717,3 +717,29 @@ th { color: #425160; }
 .board-no-tmd, .board-failed { color: #8193a0; }
 .board-failed .board-value { color: var(--bad); font-size: .85rem; }
 #skipResultsBtn { background: #f0f4f6; color: #3b5362; border: 1px solid #c6d3db; box-shadow: none; }
+
+/* Keep each control panel with its tower; graphs span the group. */
+.stage-wrap { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; }
+.stage-wrap .tmd-controls { max-width: none; margin: 0; padding: 8px; }
+.tmd-settings-row { display: grid; justify-content: stretch; gap: 12px; }
+.stage-wrap .tmd-controls .field-row.three { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.stage-wrap .tmd-controls .damping-control { flex-wrap: wrap; }
+.stage-wrap .tmd-controls .damping-control input[type="range"], .stage-wrap .tmd-controls .damping-control input[type="number"] { width: 100%; }
+.stage-wrap > canvas { --tower-view-height: clamp(280px, calc(100dvh - 310px), 640px); width: 100%; height: var(--tower-view-height); object-fit: contain; margin: 0; }
+.stage-wrap .graph-wrap { grid-column: 1 / -1; margin-top: 0; }
+.stage-pair { max-width: 660px; }
+.compare-mode .stage-pair { max-width: 1320px; gap: 38px; }
+.axis-time { font-weight: 750; }
+#teacher .control-block { margin-block: 12px; }
+.teacher-gameplay button { background: white; color: var(--section-accent); border: 1px solid var(--section-border); box-shadow: none; }
+.teacher-gameplay #startBtn { background: var(--section-accent); color: white; }
+#roomDifficulty { border-color: var(--section-border); color: var(--section-accent); font-weight: 750; }
+@media (max-width: 600px) {
+ .stage-wrap { grid-template-columns: minmax(0, 1fr); }
+ .stage-wrap .tmd-controls .field-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+ .tmd-settings-row { gap: 6px; }
+}
+
+@media (max-width: 680px) {
+ .compare-mode .stage-pair { grid-template-columns: minmax(0, 1fr); max-width: 660px; }
+}

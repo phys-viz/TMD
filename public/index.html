@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-30">
+  <link rel="stylesheet" href="/styles.css?v=classroom-31">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -51,23 +51,14 @@
           <div class="control-block difficulty-controls" role="group" aria-labelledby="difficultyHeading">
             <h3 id="difficultyHeading">Difficulty</h3>
             <div class="mode-row" aria-label="Difficulty mode">
-              <label><input type="radio" name="difficultyMode" value="easy"> Easy</label>
-              <label><input type="radio" name="difficultyMode" value="medium" checked> Medium</label>
+              <label><input type="radio" name="difficultyMode" value="easy" checked> Easy</label>
+              <label><input type="radio" name="difficultyMode" value="medium"> Medium</label>
               <label><input type="radio" name="difficultyMode" value="hard"> Hard</label>
             </div>
             <label class="check"><input id="showDangerInput" type="checkbox" checked> Show danger zone</label>
 
           </div>
-          <details>
-            <summary>Model notes</summary>
-            <p>A simplified 3.0-second earthquake shakes the ground and starts the tower moving. After that, the foundation stops and the graph shows free motion. Sway means roof displacement relative to the foundation, x - y.</p>
-            <p class="formula">T = 2*pi*sqrt(L/g) and L = g*(T/2*pi)^2</p>
-            <p>Tower height and mass use a classroom calibration: taller or heavier towers have longer natural periods, kept within a range suited to stopwatch measurements. The drawing is schematic; taller towers are drawn taller and heavier towers have thicker columns. Keep the same tower settings when comparing TMD designs.</p>
-            <p>Two hydraulic dampers remove mechanical energy from pendulum motion. At zero damping, they are removed. Resistance rises toward a lock at exactly 1.00; near lock, less relative motion can mean less energy absorbed. A locked TMD still adds its mass to the tower.</p>
-            <p>Compare mode uses identical towers and the same earthquake with independent TMD settings. Start, Pause, and Reset apply to both. Each tower has its own graph below it, with editable start and end times on its bottom axis and separate measurement cursors. Set the limits to 0 and 120 seconds to see the full trial. The graphs use matching sway scales.</p>
-            <p>One pendulum wall hit collapses that tower in every difficulty mode. Low damping and a small TMD mass can produce hits. The bob must touch a wall or hydraulic housing to register a collision. The impact is shown briefly before the tower collapses. A failed tower's graph identifies the failure cause. Impact losses are separate from hydraulic thermal energy.</p>
-            <p>Danger rule: Easy has no danger-zone collapse. Medium fails at 3.0 s of accumulated danger time. Hard fails at 2.5 s. Danger time starts after the earthquake and builds while roof sway is beyond the tower's game sway limit: <span id="labSwayLimit"></span> m. This tolerance varies by tower to keep challenges achievable; it is not a real structural prediction.</p>
-          </details>
+
         </aside>
         <section class="sim-area" id="labSimulation" aria-label="Tower simulation">
           <div class="stage-pair">
@@ -85,7 +76,7 @@
               </div>
               <canvas id="stageCompare" width="420" height="480" aria-label="Tower A motion"></canvas>
               <div class="graph-wrap">
-                <canvas id="graphCompare" width="560" height="170" aria-label="Tower A roof sway over time" aria-describedby="compareDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
+                <canvas id="graphCompare" width="560" height="210" aria-label="Tower A roof sway over time" aria-describedby="compareDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
                 <label class="axis-time axis-start" title="Edit graph start time">
                   <input id="compareGraphStartInput" aria-label="Tower A graph start time in seconds" type="number" min="0" max="120" step="0.01" value="0"><span aria-hidden="true">s</span>
                 </label>
@@ -110,7 +101,7 @@
               </div>
               <canvas id="stage" width="420" height="480" aria-label="Tower motion"></canvas>
               <div class="graph-wrap">
-                <canvas id="graph" width="560" height="170" aria-label="Tower roof sway over time" aria-describedby="primaryDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
+                <canvas id="graph" width="560" height="210" aria-label="Tower roof sway over time" aria-describedby="primaryDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
                 <label class="axis-time axis-start" title="Edit graph start time">
                   <input id="graphStartInput" aria-label="Tower graph start time in seconds" type="number" min="0" max="120" step="0.01" value="0"><span aria-hidden="true">s</span>
                 </label>
@@ -173,19 +164,24 @@
           <h2>Room setup</h2>
           <p class="section-intro">Set the challenge, then invite your groups.</p>
           <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
+          <div class="control-block earthquake-controls" role="group" aria-labelledby="teacherEarthquakeHeading">
+          <h3 id="teacherEarthquakeHeading">Earthquake</h3>
           <div id="roomStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
               <button type="button" data-strength="gentle" aria-pressed="false">Gentle</button>
               <button type="button" data-strength="moderate" aria-pressed="true">Moderate</button>
               <button type="button" data-strength="strong" aria-pressed="false">Strong</button>
             </div>
           <p class="muted">Ground shaking lasts 3.0 seconds.</p>
-          <label>Difficulty
-            <select id="roomDifficulty">
-              <option value="easy">Easy: no danger zone</option>
-              <option value="medium" selected>Medium: 3.0 s danger</option>
-              <option value="hard">Hard: 2.5 s danger</option>
-            </select>
-          </label>
+          </div>
+          <div class="control-block difficulty-controls" role="group" aria-labelledby="teacherDifficultyHeading">
+          <h3 id="teacherDifficultyHeading">Difficulty</h3>
+          <div class="mode-row" aria-label="Room difficulty mode">
+            <label><input type="radio" name="roomDifficultyMode" value="easy" checked> Easy</label>
+            <label><input type="radio" name="roomDifficultyMode" value="medium"> Medium</label>
+            <label><input type="radio" name="roomDifficultyMode" value="hard"> Hard</label>
+          </div>
+          <select id="roomDifficulty" hidden aria-label="Room difficulty"><option value="easy" selected>Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
+          </div>
           <label>Run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
           <div class="button-row">
             <button id="createRoomBtn">Create room</button>
@@ -200,10 +196,12 @@
           <div class="room-picker">
           <label>Your rooms <select id="teacherRooms"><option value="">Choose a previous room</option></select></label>
           <button id="openTeacherRoomBtn" class="button-secondary" type="button">Open room</button>
+          <button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button>
           </div>
           <p id="teacherRoomStatus" class="muted" role="status"></p>
           <div id="roomState" class="readout">No room yet.</div>
-          <h3 class="dashboard-section-title">Earthquake controls</h3>
+          <div class="control-block earthquake-controls teacher-gameplay">
+          <h3>Earthquake controls</h3>
           <ol id="phaseSteps" class="phase-steps" aria-label="Room phase"></ol>
           <div class="button-row earthquake-actions">
             <button id="lockBtn" class="button-primary">Lock designs</button>
@@ -211,10 +209,11 @@
             <button id="replayBtn" class="button-secondary">Replay earthquake</button>
             <button id="unlockBtn" class="button-secondary">Unlock for revisions</button>
           </div>
+          </div>
           <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3></div>
           <div class="roster-scroll"><table id="roster"><thead><tr><th>Group</th><th class="num">Tower period</th><th>Status</th><th class="num">Pendulum length</th><th class="num">TMD mass</th><th class="num">Damping</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody></tbody></table></div>
           <details id="blockedNamesBox" class="blocked-names" hidden><summary id="blockedNamesSummary">Blocked group names</summary><ul id="blockedNamesList"></ul></details>
-          <div class="room-danger"><button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button></div>
+
         </div>
       </div>
     </section>
@@ -253,6 +252,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-38"></script>
+  <script src="/app.js?v=classroom-39"></script>
 </body>
 </html>

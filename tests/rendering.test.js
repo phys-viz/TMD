@@ -151,7 +151,6 @@ assert.strictEqual(state().damper.damping, 0.31, "Random preserves the selected 
 changeTower(999, 99);
 assert.strictEqual(Number(dom.towerHeightInput.value), 350, "height field visibly clamps to its limit");
 assert.strictEqual(Number(dom.towerMassInput.value), 15, "mass field visibly clamps to its limit");
-assert.strictEqual(dom.labSwayLimit.textContent, state().pulse.collapseSway.toFixed(2), "model notes show the active game sway limit");
 
 // Danger labels must fit the visible red bands, including at earthquake extremes.
 for (const groundPosition of [-0.8, -0.4, 0, 0.4, 0.8]) {
@@ -241,12 +240,12 @@ assert(!hasTrace("graph", "#0f7b7e"), "Tower B's graph does not overlay Tower A"
 const swayLabel = id => dom[id].ctx.drawings.find(d => d.method === "fillText" && /^\d.* m$/.test(d.args[0])).args[0];
 assert.strictEqual(swayLabel("graphCompare"), swayLabel("graph"), "separate graphs retain matching sway scales");
 for (const id of ["graph", "graphCompare"]) {
-  assert(dom[id].ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "sway"), "each plot has a sway axis label");
+  assert(dom[id].ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "Building"), "each plot has a sway axis label");
   assert(!dom[id].ctx.drawings.some(d => d.method === "rotate"), "sway labels are horizontal");
   assert(!dom[id].ctx.drawings.some(d => d.method === "fillText" && /roof sway|click graph/.test(d.args[0])), "crossed-out plot headings and instructions are removed");
 }
 
-const clickAt = (id, time) => dom[id].listeners.click({ clientX: 48 + time / 120 * (dom[id].width - 66) });
+const clickAt = (id, time) => dom[id].listeners.click({ clientX: 72 + time / 120 * (dom[id].width - 90) });
 clickAt("graph", 4);
 clickAt("graph", 8);
 clickAt("graphCompare", 6);
@@ -419,7 +418,7 @@ assert.strictEqual(dom.primaryDangerTime.textContent, "Danger time: 2.50 / 2.50 
 assert.strictEqual(dangerLabels("graph")[0].fillColor, "#b63030", "the limit is highlighted when danger time reaches it");
 vm.runInContext("resetLab()", app);
 assert.strictEqual(dom.primaryDangerTime.textContent, "Danger time: 0.00 / 2.50 s", "Reset clears the counter");
-assert.strictEqual(dom.graph.height, 170, "inline readout adds no height to the plot");
+assert.strictEqual(dom.graph.height, 210, "inline readout adds no height to the plot");
 // The city uses the student tower renderer for every pair, including TMD hardware.
 dom.cityCanvas.ctx = canvasRecorder();
 dom.cityCanvas.getContext = () => dom.cityCanvas.ctx;
