@@ -7,7 +7,7 @@ const physics = require("./public/physics.js");
 const publicDir = path.join(__dirname, "public");
 const rooms = new Map();
 
-const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent } = require("./src/rooms.js");
+const { settingsError, updateRoomSettings, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent } = require("./src/rooms.js");
 const teacherAuth = require("./src/teacher-auth.js");
 
 const mime = {
@@ -73,7 +73,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader("Set-Cookie", teacherAuth.logout(false));
       return json(res, 200, { teacher: false });
     }
-    const teacherAction = req.method === "POST" && (url.pathname === "/api/rooms" || /\/(lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname));
+    const teacherAction = req.method === "POST" && (url.pathname === "/api/rooms" || /\/(settings|lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname));
     if (teacherAction && !teacher) return json(res, 403, { error: "Enter the teacher password to use teacher controls." });
 
     if (req.method === "POST" && url.pathname === "/api/rooms") {
@@ -142,7 +142,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { student, room: publicRoom(room) });
     }
 
-    if (req.method === "POST" && /^\/api\/rooms\/[^/]+\/(lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname)) {
+    if (req.method === "POST" && /^\/api\/rooms\/[^/]+\/(settings|lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname)) {
       const room = getRoom(url.pathname.split("/")[3]);
       if (!room) return json(res, 404, { error: "Room not found" });
       if (req.headers["x-teacher-token"] !== room.teacherToken) return json(res, 403, { error: "Only this room's teacher can use this control." });
@@ -170,6 +170,17 @@ const server = http.createServer(async (req, res) => {
       }
       room.clients.clear();
       return json(res, 200, { deleted: true, code: room.code });
+    }
+
+    if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/settings$/)) {
+      const room = getRoom(url.pathname.split("/")[3]);
+      if (room.phase !== "design") return json(res, 409, { error: "Unlock for revisions before changing room settings." });
+      const body = await readBody(req);
+      const error = settingsError(body);
+      if (error) return json(res, 400, { error });
+      updateRoomSettings(room, body);
+      broadcast(room);
+      return json(res, 200, publicRoom(room));
     }
 
     if (req.method === "POST" && url.pathname.match(/^\/api\/rooms\/[^/]+\/lock$/)) {

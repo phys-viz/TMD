@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-34">
+  <link rel="stylesheet" href="/styles.css?v=classroom-35">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -19,6 +19,7 @@
   </header>
 
   <main>
+    <p id="roomSettingsNotice" class="room-settings-notice" role="status" hidden></p>
     <section id="lab" class="view active">
       <div class="workbench">
         <aside class="panel controls">
@@ -161,8 +162,8 @@
     <section id="teacher" class="view">
       <div class="two-col teacher-layout">
         <form id="roomForm" class="panel">
-          <h2>Room setup</h2>
-          <p class="section-intro">Set the challenge, then invite your groups.</p>
+          <h2>New room setup</h2>
+          <p class="section-intro">Create a room for your groups. Use Next round settings in the dashboard to revise an existing room.</p>
           <label>Scenario seed <input id="roomSeed" value="period-window-a"></label>
           <div class="control-block earthquake-controls" role="group" aria-labelledby="teacherEarthquakeHeading">
           <h3 id="teacherEarthquakeHeading">Earthquake</h3>
@@ -203,6 +204,13 @@
           <div class="control-block teacher-gameplay">
           <h3>Earthquake controls</h3>
           <p id="phaseSteps" class="room-phase" role="status"></p>
+          <fieldset id="activeRoomSettings" class="active-room-settings" disabled>
+            <legend>Next round settings</legend>
+            <label>Difficulty<select id="activeRoomDifficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
+            <label>Earthquake strength<select id="activeRoomStrength"><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
+            <button id="applyRoomSettingsBtn" class="button-secondary" type="button">Apply settings</button>
+          </fieldset>
+          <p id="activeRoomSettingsStatus" class="muted" role="status"></p>
           <div class="button-row earthquake-actions">
             <button id="lockBtn" class="button-primary">Lock designs</button>
             <button id="startBtn" class="button-secondary">Start earthquake</button>
@@ -252,6 +260,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-42"></script>
+  <script src="/app.js?v=classroom-43"></script>
 </body>
 </html>

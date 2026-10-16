@@ -951,6 +951,7 @@ function connectRoom(code) {
 }
 
 function clearDeletedRoom(code) {
+  $("roomSettingsNotice").hidden = true;
   localStorage.removeItem(`tmd-teacher-${code}`);
   if (localStorage.getItem("tmd-last-teacher-room") === code) localStorage.removeItem("tmd-last-teacher-room");
   sessionStorage.removeItem(`tmd-token-${code}`);
@@ -961,6 +962,9 @@ function clearDeletedRoom(code) {
     currentRoom = null;
     currentStudent = null;
     stopQuakeSound();
+    $("activeRoomSettings").disabled = true;
+    $("applyRoomSettingsBtn").disabled = true;
+    $("activeRoomSettingsStatus").textContent = "Open or create a room to choose settings.";
     $("roomState").textContent = "Room deleted. Create or open another room.";
     $("studentState").textContent = "This room was deleted by the teacher.";
     $("studentTower").textContent = "Join a room to receive a tower.";
@@ -985,6 +989,51 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 
+let applyingRoomSettings = false;
+let roomSettingsEditorKey = "";
+let lastRoomScenario = null;
+
+function roomStrength(config) {
+  return Object.keys(EARTHQUAKE_STRENGTHS).find(key => Math.abs(EARTHQUAKE_STRENGTHS[key] - config.amplitude) < 1e-9) || "moderate";
+}
+
+function roomScenarioText(config) {
+  const strength = roomStrength(config);
+  return `${DIFFICULTY[config.difficulty]?.label || "Medium"} difficulty / ${strength[0].toUpperCase() + strength.slice(1)} earthquake`;
+}
+
+function roomSettingsDirty() {
+  return currentRoom && ($("activeRoomDifficulty").value !== currentRoom.config.difficulty || $("activeRoomStrength").value !== roomStrength(currentRoom.config));
+}
+
+function renderRoomSettings(teacher) {
+  const signature = `${currentRoom.config.difficulty}:${currentRoom.config.amplitude}`;
+  const editorKey = `${currentRoom.code}:${signature}`;
+  if (roomSettingsEditorKey !== editorKey || currentRoom.phase !== "design") {
+    $("activeRoomDifficulty").value = currentRoom.config.difficulty;
+    $("activeRoomStrength").value = roomStrength(currentRoom.config);
+    $("activeRoomSettingsStatus").textContent = "";
+    roomSettingsEditorKey = editorKey;
+  }
+  if (lastRoomScenario?.code !== currentRoom.code || currentRoom.phase !== "design") $("roomSettingsNotice").hidden = true;
+  if (lastRoomScenario?.code === currentRoom.code && lastRoomScenario.signature !== signature) {
+    $("roomSettingsNotice").textContent = `Room settings updated: ${roomScenarioText(currentRoom.config)}. Your tower and saved design stay the same.`;
+    $("roomSettingsNotice").hidden = false;
+  }
+  lastRoomScenario = { code: currentRoom.code, signature };
+  const editable = teacher && currentRoom.phase === "design" && !applyingRoomSettings && !startingQuake;
+  for (const id of ["activeRoomSettings", "activeRoomDifficulty", "activeRoomStrength"]) $(id).disabled = !editable;
+  const dirty = roomSettingsDirty();
+  $("applyRoomSettingsBtn").disabled = !editable || !dirty;
+  if (applyingRoomSettings || (currentRoom.phase === "design" && dirty)) {
+    $("lockBtn").disabled = true;
+    $("startBtn").disabled = true;
+  }
+  if (!applyingRoomSettings) $("activeRoomSettingsStatus").textContent = currentRoom.phase !== "design"
+    ? "Unlock for revisions to change the next round."
+    : dirty ? "Apply your changes before locking or starting." : "Settings are saved. Towers and submitted designs stay in this room.";
+}
+
 function renderRoom() {
   if (!currentRoom) return;
   const teacher = teacherUnlocked && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
@@ -1000,15 +1049,15 @@ function renderRoom() {
     $(id).disabled = !teacher || !controls[id] || startingQuake || (id === "replayBtn" && !!currentRoom.quake?.preparing);
     $(id).className = `button-${controls[id] || "secondary"}`;
   }
+  renderRoomSettings(teacher);
   $("deleteRoomBtn").disabled = !teacher;
   renderBlockedNames(teacher);
   renderTeacherRooms();
   const roomMode = DIFFICULTY[currentRoom.config.difficulty]?.label || "Medium";
   const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[phase] || phase;
-  const site = typeof location !== "undefined" ? location.host : "";
-  $("roomState").innerHTML = `<div class="room-banner"><div class="join-callout">${site ? `<span>Join at <strong>${escapeHtml(site)}</strong> with code</span>` : "<span>Room code</span>"}<span class="room-code">${escapeHtml(currentRoom.code)}</span></div></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
+  $("roomState").innerHTML = `<div class="room-banner"><div class="join-callout"><span>JOIN CODE</span><span class="room-code">${escapeHtml(currentRoom.code)}</span></div></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
   $("phaseSteps").textContent = `Status: ${phaseLabel}`;
-  $("studentState").textContent = `Room ${currentRoom.code} · ${phaseLabel}`;
+  $("studentState").textContent = `Room ${currentRoom.code} / ${phaseLabel} / ${roomScenarioText(currentRoom.config)}`;
   $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" title="Remove group" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
   const wasLocked = $("submitLength").disabled;
   const locked = phase !== "design" || !currentStudent;
@@ -1042,7 +1091,7 @@ function renderRoom() {
     $("submitState").textContent = "Room reopened. Change your settings and click Submit / revise to save them for the next earthquake.";
   }
   const lockBanner = !locked ? "" : `<div class="lock-banner" role="status"><span aria-hidden="true">🔒</span> ${phase === "running" ? "Earthquake underway — watch the board!" : "Designs locked — watch the board."}${latest.submission ? "" : " No design was submitted, so your tower is tested without a TMD."}</div>`;
-  $("studentTower").innerHTML = `${lockBanner}<div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your tower from collapsing during an earthquake.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
+  $("studentTower").innerHTML = `${lockBanner}<p class="round-settings">Current round: ${roomScenarioText(currentRoom.config)}</p><div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your tower from collapsing during an earthquake.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
   $("joinedSummary").innerHTML = `<strong>${escapeHtml(latest.nickname)}</strong> · Room ${escapeHtml(currentRoom.code)} · ${escapeHtml(phaseLabel)}`;
   if (!joinEditing) showJoined(true);
 }
@@ -1108,7 +1157,7 @@ function renderCity() {
     cityStart = performance.now() - (Date.now() - pulse.startedAt);
     lastCityStartedAt = pulse.startedAt;
   }
-  $("cityCaption").textContent = `Room ${currentRoom.code}: same earthquake for every tower.`;
+  $("cityCaption").textContent = `Room ${currentRoom.code}: ${roomScenarioText(currentRoom.config)} - same settings for every tower.`;
   $("quakeBadge").textContent = pulse ? `${DIFFICULTY[pulse.difficulty]?.label || "Medium"}: ${fmt(pulse.amplitude)} m` : "Waiting";
   const t = currentRoom.phase === "running" ? Math.min(Math.max(0, (performance.now() - cityStart) / 1000), (pulse?.runDuration || RUN_DURATION) + 3.6) : 0;
   const running = currentRoom.phase === "running" && !!pulse;
@@ -1488,6 +1537,35 @@ $("lockBtn").addEventListener("click", async () => {
     renderRoom();
     $("teacherRoomStatus").textContent = "";
   } catch (error) { $("teacherRoomStatus").textContent = error.message; }
+});
+["activeRoomDifficulty", "activeRoomStrength"].forEach(id => {
+  $(id).addEventListener("change", () => renderRoom());
+});
+$("applyRoomSettingsBtn").addEventListener("click", async () => {
+  if (!currentRoom || currentRoom.phase !== "design" || applyingRoomSettings || !roomSettingsDirty()) return;
+  const code = currentRoom.code;
+  applyingRoomSettings = true;
+  renderRoom();
+  $("activeRoomSettingsStatus").textContent = "Applying settings...";
+  let errorMessage = "";
+  try {
+    const room = await api(`/api/rooms/${code}/settings`, {
+      difficulty: $("activeRoomDifficulty").value,
+      strength: $("activeRoomStrength").value
+    });
+    if (currentRoom?.code === code) {
+      currentRoom = room;
+      renderRoom();
+      renderCity();
+    }
+  } catch (error) { errorMessage = error.message; }
+  finally {
+    applyingRoomSettings = false;
+    if (currentRoom?.code === code) {
+      renderRoom();
+      if (errorMessage) $("activeRoomSettingsStatus").textContent = errorMessage;
+    }
+  }
 });
 $("unlockBtn").addEventListener("click", async () => {
   if (!currentRoom) return;

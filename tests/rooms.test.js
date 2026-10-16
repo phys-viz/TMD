@@ -127,11 +127,37 @@ async function startRun(path) {
     assert.deepEqual(replay.results, started.results);
     const blockedUnlock = await fetch(`${baseUrl}/api/rooms/${room.code}/unlock`, { method: 'POST' });
     assert.equal(blockedUnlock.status, 403, "students cannot unlock rooms");
+    const settingsRequest = (body, headers = {}) => fetch(`${baseUrl}/api/rooms/${room.code}/settings`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: teacherCookie, 'X-Teacher-Token': teacherKeys.get(room.code), ...headers }, body: JSON.stringify(body)
+    });
+    assert.equal((await settingsRequest({ difficulty: 'hard', strength: 'strong' }, { Cookie: '' })).status, 403, 'settings require teacher login');
+    assert.equal((await settingsRequest({ difficulty: 'hard', strength: 'strong' }, { 'X-Teacher-Token': 'wrong' })).status, 403, 'settings require this room teacher key');
+    assert.equal((await settingsRequest({ difficulty: 'hard', strength: 'strong' })).status, 409, 'running rounds cannot be edited');
     const reopened = await post(`/api/rooms/${room.code}/unlock`);
     assert.equal(reopened.phase, 'design');
     assert.equal(reopened.quake, null);
     assert.deepEqual(reopened.results, []);
     assert(reopened.students.every(s => !s.result && s.submission), "unlock clears scores while retaining designs");
+    for (const invalid of [null, {}, { difficulty: 'unknown', strength: 'strong' }, { difficulty: 'hard', strength: 'invalid' }]) {
+      assert.equal((await settingsRequest(invalid)).status, 400, 'invalid scenarios are rejected atomically');
+    }
+    const unchanged = await (await fetch(`${baseUrl}/api/rooms/${room.code}`)).json();
+    assert.deepEqual(unchanged.config, reopened.config, 'invalid settings never partially change difficulty');
+    const changed = await post(`/api/rooms/${room.code}/settings`, { difficulty: 'hard', strength: 'strong' });
+    assert.equal(changed.code, reopened.code, 'revisions keep the same join code');
+    assert.deepEqual(changed.students, reopened.students, 'settings preserve every tower, identity and submitted design');
+    assert.equal(changed.config.difficulty, 'hard');
+    assert.equal(changed.config.amplitude, P.earthquakeStrengths.strong);
+    assert.equal(changed.config.seed, reopened.config.seed);
+    assert.equal(changed.quake, null);
+    assert.deepEqual(changed.results, []);
+    await post(`/api/rooms/${room.code}/lock`);
+    assert.equal((await settingsRequest({ difficulty: 'easy', strength: 'gentle' })).status, 409, 'locking freezes the scenario');
+    const revisedRun = await startRun(`/api/rooms/${room.code}/start`);
+    assert.equal(revisedRun.quake.difficulty, 'hard', 'the next scored round uses the updated difficulty');
+    assert.equal(revisedRun.quake.collapseTime, 2.5);
+    assert.equal(revisedRun.quake.amplitude, P.earthquakeStrengths.strong, 'the next round uses updated strength');
+    assert.equal(revisedRun.config.seed, reopened.config.seed);
     const regular = await post('/api/rooms', { seed: 'regular' });
     assert.equal(regular.students.length, 0);
     assert.equal(regular.preview, false);
@@ -273,6 +299,13 @@ async function startRun(path) {
       assert.equal(joinedUpdate.students[0].nickname, 'Live Pair', 'the existing connection receives updates after idle time');
       studentEvents = await roomEvents(live.code);
       assert.equal((await studentEvents.next()).students.length, 1, 'reconnecting receives the current room snapshot');
+      const revisedLive = await post(`/api/rooms/${live.code}/settings`, { difficulty: 'easy', strength: 'gentle' });
+      for (const stream of [teacherEvents, studentEvents]) {
+        const update = await stream.next(room => room.config?.difficulty === 'easy' && room.config?.amplitude === P.earthquakeStrengths.gentle);
+        assert.deepEqual(update.students, revisedLive.students, 'teacher and student streams receive settings without changing assignments');
+      }
+      const restoredSettings = await (await fetch(`${baseUrl}/api/rooms/${live.code}`)).json();
+      assert.deepEqual(restoredSettings.config, revisedLive.config, 'reconnecting loads the saved round settings');
       await post(`/api/rooms/${live.code}/lock`);
       assert.equal((await teacherEvents.next(room => room.phase === 'locked')).phase, 'locked');
       assert.equal((await studentEvents.next(room => room.phase === 'locked')).phase, 'locked', 'all connected clients receive the change');

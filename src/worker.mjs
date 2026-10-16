@@ -3,7 +3,7 @@ import rules from './rooms.js';
 import physics from '../public/physics.js';
 import teacherAuth from './teacher-auth.js';
 
-const { createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent } = rules;
+const { settingsError, updateRoomSettings, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent } = rules;
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode() {
@@ -68,7 +68,7 @@ export default {
       }
       if (url.pathname === '/api/teacher/logout' && request.method === 'POST')
         return Response.json({ teacher: false }, { headers: { 'Set-Cookie': teacherAuth.logout(), 'Cache-Control': 'no-store' } });
-      const teacherAction = request.method === 'POST' && (url.pathname === '/api/rooms' || /\/(lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname));
+      const teacherAction = request.method === 'POST' && (url.pathname === '/api/rooms' || /\/(settings|lock|unlock|start|replay|delete|remove-student|blocked-names)$/.test(url.pathname));
       if (teacherAction && !teacher) return json({ error: 'Enter the teacher password to use teacher controls.' }, 403);
       if (url.pathname === '/api/rooms' && request.method === 'POST') {
         for (let attempt = 0; attempt < 5; attempt++) {
@@ -78,7 +78,7 @@ export default {
         }
         return json({ error: 'Please try creating a room again.' }, 503);
       }
-      const match = url.pathname.match(/^\/(?:api\/rooms|events)\/([A-Z2-9]{5,6})(?:\/(join|submit|lock|unlock|start|replay|delete|remove-student|blocked-names))?$/i);
+      const match = url.pathname.match(/^\/(?:api\/rooms|events)\/([A-Z2-9]{5,6})(?:\/(join|submit|settings|lock|unlock|start|replay|delete|remove-student|blocked-names))?$/i);
       if (!match) return json({ error: 'Room not found' }, 404);
       const action = url.pathname.startsWith('/events/') ? 'events' : (match[2] || 'state');
       const stub = env.ROOMS.getByName(match[1].toUpperCase());
@@ -198,7 +198,7 @@ export class ChallengeRoom extends DurableObject {
         return new Response(null, { status: 101, webSocket: client });
       }
       if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-      if (['/lock', '/unlock', '/start', '/replay', '/delete', '/remove-student', '/blocked-names'].includes(url.pathname) && request.headers.get('X-Teacher-Token') !== room.teacherToken)
+      if (['/settings', '/lock', '/unlock', '/start', '/replay', '/delete', '/remove-student', '/blocked-names'].includes(url.pathname) && request.headers.get('X-Teacher-Token') !== room.teacherToken)
         return json({ error: "Only this room's teacher can use this control." }, 403);
       if (url.pathname === '/blocked-names') return json({ blockedNames: room.blockedNames || [] });
       if (url.pathname === '/remove-student') {
@@ -241,6 +241,15 @@ export class ChallengeRoom extends DurableObject {
         student.submission = physics.clampDamper({ wallLimit: 2.7, ...body.submission });
         await this.save();
         return json({ student, room: publicRoom(room) });
+      }
+      if (url.pathname === '/settings') {
+        if (room.phase !== 'design') return json({ error: 'Unlock for revisions before changing room settings.' }, 409);
+        const body = await request.json();
+        const error = settingsError(body);
+        if (error) return json({ error }, 400);
+        updateRoomSettings(room, body);
+        await this.save();
+        return json(publicRoom(room));
       }
       if (url.pathname === '/lock') room.phase = 'locked';
       else if (url.pathname === '/unlock') {

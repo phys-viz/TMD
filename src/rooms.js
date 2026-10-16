@@ -139,6 +139,22 @@ function createRoom(body, assignedCode) {
   return room;
 }
 
+// Validate the complete next-round scenario before changing any room state.
+function settingsError(body) {
+  if (!body || typeof body !== "object") return "Choose difficulty and earthquake strength.";
+  if (!Object.hasOwn(difficultySettings, body.difficulty)) return "Choose Easy, Medium, or Hard.";
+  if (!Object.hasOwn(physics.earthquakeStrengths, body.strength)) return "Choose Gentle, Moderate, or Strong.";
+  return null;
+}
+
+function updateRoomSettings(room, body) {
+  room.config.difficulty = body.difficulty;
+  room.config.amplitude = physics.earthquakeStrengths[body.strength];
+  room.quake = null;
+  room.results = [];
+  for (const student of room.students.values()) student.result = null;
+}
+
 function ensureStudent(room, body) {
   const nickname = nicknameOf(body);
   let student = findStudent(room, body.token);
@@ -213,4 +229,4 @@ function removeStudent(room, id) {
 }
 
 
-module.exports = { maxGroups, isBlockedName, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent };
+module.exports = { settingsError, updateRoomSettings, maxGroups, isBlockedName, createRoom, publicRoom, ensureStudent, findStudent, joinError, submissionError, addPreviewGroups, beginQuake, scoreRoom, removeStudent };

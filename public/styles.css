@@ -744,3 +744,11 @@ th { color: #425160; }
 @media (min-width: 681px) {
   .compare-mode #compareTower { transform: translateX(-12px); }
 }
+
+.active-room-settings { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 0; padding: 12px; border: 1px solid #c6d3db; border-radius: 6px; min-width: 0; }
+.active-room-settings legend { padding-inline: 5px; font-weight: 700; font-size: .85rem; color: #314b59; }
+#teacher .active-room-settings label { margin: 0; flex: 1 1 150px; font-size: .9rem; }
+.active-room-settings:disabled { opacity: .65; }
+#activeRoomSettingsStatus { margin: 0; font-size: .85rem; }
+.room-settings-notice { margin: 0 0 12px; padding: 10px 14px; background: #e7eff8; border: 1px solid #9eb9d7; border-radius: 6px; color: #203c49; font-weight: 650; }
+.round-settings { color: #314b59; font-weight: 650; }
