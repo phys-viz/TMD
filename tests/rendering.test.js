@@ -80,12 +80,25 @@ for (const id of ["earthquakeStrength", "roomStrength"]) {
   dom[id].querySelectorAll = () => buttons;
   dom[id].querySelector = () => buttons[1];
 }
+// Simulate a browser restoring a previous Medium selection before startup.
 let difficulty = "medium";
+const difficultyInputs = [...html.matchAll(/<input[^>]+name="difficultyMode"[^>]*>/g)].map(match => {
+  const input = domElement(match[0]);
+  Object.defineProperty(input, "checked", {
+    get: () => difficulty === input.value,
+    set: checked => { if (checked) difficulty = input.value; }
+  });
+  return input;
+});
+const teacherDifficultyInputs = [...html.matchAll(/<input[^>]+name="roomDifficultyMode"[^>]*>/g)].map(match => domElement(match[0]));
+const pageListeners = {};
 let clock = 0;
 const app = vm.createContext({
-  window: { TMDPhysics: require("../public/physics.js") },
+  window: { TMDPhysics: require("../public/physics.js"), addEventListener: (event, callback) => { pageListeners[event] = callback; } },
   document: {
-    getElementById: id => dom[id], querySelectorAll: () => [],
+    getElementById: id => dom[id],
+    querySelectorAll: selector => selector === 'input[name="difficultyMode"]' ? difficultyInputs
+      : selector === 'input[name="roomDifficultyMode"]' ? teacherDifficultyInputs : [],
     querySelector: () => ({ value: difficulty })
   },
   performance: { now: () => clock }, requestAnimationFrame() {},
@@ -108,6 +121,17 @@ function contactAngle(tower, damper, side = 1, sway = 0) {
 app.contactAngle = contactAngle;
 vm.runInContext(source, app);
 const state = () => vm.runInContext("sim", app);
+assert.equal(state().pulse.difficulty, "easy", "fresh startup overrides restored Medium with Easy");
+assert.equal(dom.showDangerInput.disabled, true, "Easy default disables the danger zone control");
+difficulty = "hard";
+dom.roomDifficulty.value = "medium";
+pageListeners.pageshow({ persisted: false });
+assert.equal(state().pulse.difficulty, "easy", "Easy also wins over form restoration during page load");
+assert.equal(dom.roomDifficulty.value, "easy", "new teacher setup defaults to Easy");
+// The remaining danger/geometry checks exercise an explicitly selected Medium trial.
+difficulty = "medium";
+vm.runInContext("resetLab()", app);
+
 assert.equal(state().damper.damping, 0, "Solo Lab starts with zero damping");
 assert.equal(Number(dom.compareDampingInput.value), 0, "comparison starts with zero damping");
 assert.equal(Number(dom.submitDamping.value), 0, "new challenge submissions start with zero damping");

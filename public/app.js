@@ -1568,6 +1568,22 @@ $("quakeSoundBtn").addEventListener("click", () => {
   }
 });
 
+function resetDifficultyDefaults() {
+  // Browsers can restore old radio selections despite the HTML checked attribute.
+  for (const name of ["difficultyMode", "roomDifficultyMode"]) {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(input => {
+      input.checked = input.value === "easy";
+    });
+  }
+  $("roomDifficulty").value = "easy";
+}
+resetDifficultyDefaults();
+window.addEventListener?.("pageshow", event => {
+  if (!event.persisted) {
+    resetDifficultyDefaults();
+    resetLab();
+  }
+});
 updateLabels();
 resetLab();
 requestAnimationFrame(animateLab);
