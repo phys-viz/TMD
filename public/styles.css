@@ -749,3 +749,7 @@ th { color: #425160; }
 #teacher .difficulty-controls .mode-row label { display: flex; margin: 0; padding: 6px; }
 .difficulty-controls .mode-row label:has(input:checked),
 #teacher .difficulty-controls .mode-row label:has(input:checked) { color: #fff; }
+
+@media (min-width: 681px) {
+  .compare-mode #compareTower { transform: translateX(-12px); }
+}

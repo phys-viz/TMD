@@ -358,14 +358,16 @@ function towerPoint(baseX, roofX, towerWidth, bottom, top, side, y) {
   return baseX + (roofX - baseX) * t + side * towerWidth / 2;
 }
 
-function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, failed = false, columnWidth = 5) {
-  const left0 = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, y0);
-  const right0 = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, y0);
-  const left1 = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, y1);
-  const right1 = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, y1);
-  const minX = Math.min(left0, right0, left1, right1);
-  const maxX = Math.max(left0, right0, left1, right1);
-  const glass = ctx.createLinearGradient(minX, 0, maxX, 0);
+function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, failed = false, columnWidth = 5, foundationY = bottom) {
+  // Extend only the shaft below the cutaway. The upper walls retain the exact
+  // geometry used by the pendulum and contact detector, under uniform scaling.
+  const split = Math.min(bottom, top + 240);
+  const mapY = y => y <= split ? y : split + (y - split) * (foundationY - split) / (bottom - split);
+  const levels = [y0, ...(split > y1 && split < y0 ? [split] : []), y1];
+  const sidePoints = side => levels.map(y => [towerPoint(baseX, roofX, towerWidth, bottom, top, side, y), mapY(y)]);
+  const left = sidePoints(-1), right = sidePoints(1);
+  const all = [...left, ...right];
+  const glass = ctx.createLinearGradient(Math.min(...all.map(p => p[0])), 0, Math.max(...all.map(p => p[0])), 0);
   if (failed) {
     glass.addColorStop(0, "#ead5cf");
     glass.addColorStop(0.5, "#f7ece8");
@@ -382,22 +384,16 @@ function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, fa
   ctx.shadowOffsetY = 8;
   ctx.fillStyle = glass;
   ctx.beginPath();
-  ctx.moveTo(left0, y0);
-  ctx.lineTo(right0, y0);
-  ctx.lineTo(right1, y1);
-  ctx.lineTo(left1, y1);
+  const outline = [...left, ...right.slice().reverse()];
+  outline.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
   ctx.closePath();
   ctx.fill();
   ctx.restore();
-
   ctx.strokeStyle = failed ? "#723a37" : "#1e2d36";
   ctx.lineWidth = columnWidth;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(left0, y0);
-  ctx.lineTo(left1, y1);
-  ctx.moveTo(right0, y0);
-  ctx.lineTo(right1, y1);
+  for (const points of [left, right]) points.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
   ctx.stroke();
   ctx.lineCap = "butt";
 }
@@ -411,7 +407,8 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
   const scale = layout.swayScale;
   const baseX = w / 2 + sample.y * scale;
   const roofX = baseX + sample.sway * scale;
-  const { bottom, top, columnWidth, towerWidth } = layout;
+  const { top, columnWidth, towerWidth } = layout;
+  const bottom = options.foundationY ?? layout.bottom;
   const d = run.damper;
 
   if (options.background !== false) {
@@ -553,7 +550,8 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
       ctx.translate((leftTop + rightTop) / 2, collapsedTop - 11);
       ctx.rotate(0.09 + 0.18 * p);
       ctx.globalAlpha = 1 - crush;
-      ctx.roundRect(-towerWidth / 2 - 10, -9, towerWidth + 20, 18, 3);
+      ctx.beginPath();
+      ctx.roundRect(-(towerWidth + columnWidth) / 2, -9, towerWidth + columnWidth, 18, 3);
       ctx.fill();
       ctx.restore();
 
@@ -610,9 +608,6 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     ctx.strokeStyle = "rgba(248, 251, 252, .95)";
     ctx.lineWidth = 7;
     ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(1, options.bobAspect || 1);
-    ctx.translate(-w / 2, -h / 2);
     ctx.strokeText("FAILED", w / 2, h / 2);
     ctx.fillText("FAILED", w / 2, h / 2);
     ctx.restore();
@@ -620,13 +615,14 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     return;
   }
 
-  drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, bottom, top, false, columnWidth);
+  drawTowerSegment(ctx, baseX, roofX, towerWidth, layout.bottom, top, layout.bottom, top, false, columnWidth, bottom);
   ctx.fillStyle = "#0f7b7e";
   ctx.save();
   ctx.shadowColor = "rgba(20, 33, 42, .20)";
   ctx.shadowBlur = 14;
   ctx.shadowOffsetY = 5;
-  ctx.roundRect(roofX - towerWidth / 2, top - 15, towerWidth, 18, 3);
+  ctx.beginPath();
+  ctx.roundRect(roofX - (towerWidth + columnWidth) / 2, top - 15, towerWidth + columnWidth, 18, 3);
   ctx.fill();
   if (compareSim && (canvasId === "stage" || canvasId === "stageCompare")) {
     ctx.save();
@@ -681,11 +677,8 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
       }
     }
 
-    // Keep the bob round when the city stretches the building vertically.
+    // The complete mechanism uses a uniform scale in every view.
     ctx.save();
-    ctx.translate(bobX, bobY);
-    ctx.scale(1, options.bobAspect || 1);
-    ctx.translate(-bobX, -bobY);
     const bobGradient = ctx.createRadialGradient(bobX - bobR * 0.35, bobY - bobR * 0.45, bobR * 0.2, bobX, bobY, bobR);
     bobGradient.addColorStop(0, "#f2c46d");
     bobGradient.addColorStop(0.68, "#9b6b18");
@@ -1145,7 +1138,7 @@ function renderCity() {
     const height = 180 + fraction * 160;
     const towerScale = Math.min(0.3, cell / 420);
     const layout = P.towerGeometry(s.tower);
-    const verticalScale = height / (layout.bottom - layout.top);
+    const foundationY = layout.top + height / towerScale;
     const failureTime = result?.failureTime ?? terminal?.t ?? Infinity;
     const failed = result?.status === "failed" && (aftermath || t >= failureTime);
     const run = {
@@ -1158,9 +1151,9 @@ function renderCity() {
       energyScale: Math.max(4000, s.tower.mass * 0.0012)
     };
     ctx.save();
-    ctx.translate(cx - layout.width / 2 * towerScale, h - 48 - layout.bottom * verticalScale);
-    ctx.scale(towerScale, verticalScale);
-    drawStage(sample, run, { width: layout.width, height: layout.height, getContext: () => ctx }, { background: false, danger: false, bobAspect: towerScale / verticalScale });
+    ctx.translate(cx - layout.width / 2 * towerScale, h - 48 - foundationY * towerScale);
+    ctx.scale(towerScale, towerScale);
+    drawStage(sample, run, { width: layout.width, height: foundationY + 44, getContext: () => ctx }, { background: false, danger: false, foundationY });
     ctx.restore();
     ctx.fillStyle = "#17212b";
     ctx.font = "12px system-ui";

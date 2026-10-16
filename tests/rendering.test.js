@@ -155,7 +155,7 @@ assert.strictEqual(tall.column, short.column, "height changes preserve column th
 const heavy = changeTower(350, 15);
 assert(heavy.column > tall.column, "mass controls visibly thicken structural columns");
 assert.strictEqual(heavy.roof[1], tall.roof[1], "mass changes preserve the drawn height");
-assert.strictEqual(heavy.roof[0], tall.roof[0], "tower changes keep the resting tower on the same foundation");
+assert.strictEqual(heavy.roof[0] + heavy.roof[2] / 2, tall.roof[0] + tall.roof[2] / 2, "tower changes keep the resting tower on the same foundation");
 assert.strictEqual(state().tower.mass, 15e6, "mass input converts million kilograms into physics units");
 assert.strictEqual(state().baseline.samples[0].t, 0, "changing towers refreshes the baseline trial");
 vm.runInContext("sim.playing = true; sim.state.t = 12; graphCursors = [4, 8]", app);
@@ -460,10 +460,41 @@ assert.equal(cityDrawings.filter(d => d.method === "stroke" && d.width === 8).le
 assert.equal(cityDrawings.filter(d => d.method === "fillText" && String(d.args[0]).startsWith("Pair ")).length, 12, "all pairs keep readable skyline labels");
 assert.equal(cityDrawings.filter(d => d.method === "fillRect" && d.args[2] === 420).length, 0, "individual towers do not paint over their neighbors");
 const cityScales = cityDrawings.filter(d => d.method === "scale");
-for (let i = 0; i < cityScales.length; i += 2) {
-  const [sx, sy] = cityScales[i].args;
-  const [bx, by] = cityScales[i + 1].args;
-  assert(Math.abs(sx * bx - sy * by) < 1e-9, "city bobs have equal horizontal and vertical display scales");
+for (const command of cityScales) {
+  const [sx, sy] = command.args;
+  assert(Math.abs(sx - sy) < 1e-9, "City roofs, rods, housings and bobs all retain their proportions");
+}
+// Check the rod's displayed length throughout the swing at sparse and full City sizes.
+for (const count of [1, 12]) for (const height of [170, 350]) for (const theta of [-.4, 0, .4]) {
+  dom.cityCanvas.ctx.drawings.length = 0;
+  vm.runInContext(`currentRoom = {
+    code: "PROPORTIONS", phase: "design", config: {}, quake: null, results: [],
+    students: Array.from({ length: ${count} }, () => ({ nickname: "Test", tower: P.createLabTower(${height}, 11.5e6),
+      submission: { enabled: true, length: 10.3, massRatio: .04, damping: 0 },
+      result: { status: "standing", samples: [{ t: 0, y: 0, sway: 0, theta: ${theta}, heat: 0 }] }
+    }))
+  }; renderCity()`, app);
+  const commands = dom.cityCanvas.ctx.drawings;
+  const displayScale = Math.min(.3, 1100 / count / 420);
+  const rods = commands.map((command, index) => ({ ...command, index })).filter(d => d.method === "stroke" && d.width === 2 && d.color === "#1e2d36");
+  assert.equal(rods.length, count);
+  for (const rod of rods) {
+    const path = commands.slice(0, rod.index);
+    const from = path.findLast(d => d.method === "moveTo").args;
+    const to = path.findLast(d => d.method === "lineTo").args;
+    assert(Math.abs(Math.hypot(to[0] - from[0], to[1] - from[1]) * displayScale - 154.5 * displayScale) < 1e-9,
+      "displayed City rod length stays constant as it swings");
+  }
+  const layout = app.window.TMDPhysics.towerGeometry(app.window.TMDPhysics.createLabTower(height, 11.5e6));
+  const roofs = commands.filter(d => d.method === "roundRect" && d.fillColor === "#0f7b7e");
+  for (const roof of roofs) {
+    assert.equal(roof.args[2], layout.towerWidth + layout.columnWidth, "roof spans the outer column edges");
+    assert.equal(roof.args[3], 18, "roof retains its shallow thickness");
+  }
+  const foundations = commands.filter(d => d.method === "roundRect" && d.fillColor === "#cedee5");
+  const desiredHeight = 180 + (height - 170) / 180 * 160;
+  assert(Math.abs((foundations[0].args[1] + 8 - layout.top) * displayScale - desiredHeight) < 1e-9,
+    "City keeps its intended skyline height while extending only the lower shaft");
 }
 // The original buckle remains, followed by a ground-level rubble ending.
 function collapseDrawing(age) {
@@ -557,7 +588,7 @@ assert.equal(dom.teacher.classList.contains("active"), false, "locked teachers c
 assert.equal(dom.teacherLogin.classList.contains("active"), true, "Teacher tab opens the password form");
 vm.runInContext("teacherUnlocked = true; setView('teacher')", app);
 assert.equal(dom.teacher.classList.contains("active"), true, "authenticated teachers can open the dashboard");
-// City scales the complete canonical scene; mounts stay on both columns while swaying.
+// City keeps the upper cutaway geometry intact; mounts stay on both columns while swaying.
 for (const height of [170, 350]) for (const mass of [7.5e6, 15e6]) for (const sway of [-.8, .8]) {
   dom.cityCanvas.ctx.drawings.length = 0;
   vm.runInContext(`currentRoom = {
