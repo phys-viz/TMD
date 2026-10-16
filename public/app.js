@@ -358,16 +358,14 @@ function towerPoint(baseX, roofX, towerWidth, bottom, top, side, y) {
   return baseX + (roofX - baseX) * t + side * towerWidth / 2;
 }
 
-function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, failed = false, columnWidth = 5, foundationY = bottom) {
-  // Extend only the shaft below the cutaway. The upper walls retain the exact
-  // geometry used by the pendulum and contact detector, under uniform scaling.
-  const split = Math.min(bottom, top + 240);
-  const mapY = y => y <= split ? y : split + (y - split) * (foundationY - split) / (bottom - split);
-  const levels = [y0, ...(split > y1 && split < y0 ? [split] : []), y1];
-  const sidePoints = side => levels.map(y => [towerPoint(baseX, roofX, towerWidth, bottom, top, side, y), mapY(y)]);
-  const left = sidePoints(-1), right = sidePoints(1);
-  const all = [...left, ...right];
-  const glass = ctx.createLinearGradient(Math.min(...all.map(p => p[0])), 0, Math.max(...all.map(p => p[0])), 0);
+function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, failed = false, columnWidth = 5) {
+  const left0 = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, y0);
+  const right0 = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, y0);
+  const left1 = towerPoint(baseX, roofX, towerWidth, bottom, top, -1, y1);
+  const right1 = towerPoint(baseX, roofX, towerWidth, bottom, top, 1, y1);
+  const minX = Math.min(left0, right0, left1, right1);
+  const maxX = Math.max(left0, right0, left1, right1);
+  const glass = ctx.createLinearGradient(minX, 0, maxX, 0);
   if (failed) {
     glass.addColorStop(0, "#ead5cf");
     glass.addColorStop(0.5, "#f7ece8");
@@ -384,16 +382,22 @@ function drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, y0, y1, fa
   ctx.shadowOffsetY = 8;
   ctx.fillStyle = glass;
   ctx.beginPath();
-  const outline = [...left, ...right.slice().reverse()];
-  outline.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+  ctx.moveTo(left0, y0);
+  ctx.lineTo(right0, y0);
+  ctx.lineTo(right1, y1);
+  ctx.lineTo(left1, y1);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
+
   ctx.strokeStyle = failed ? "#723a37" : "#1e2d36";
   ctx.lineWidth = columnWidth;
   ctx.lineCap = "round";
   ctx.beginPath();
-  for (const points of [left, right]) points.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+  ctx.moveTo(left0, y0);
+  ctx.lineTo(left1, y1);
+  ctx.moveTo(right0, y0);
+  ctx.lineTo(right1, y1);
   ctx.stroke();
   ctx.lineCap = "butt";
 }
@@ -615,7 +619,7 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     return;
   }
 
-  drawTowerSegment(ctx, baseX, roofX, towerWidth, layout.bottom, top, layout.bottom, top, false, columnWidth, bottom);
+  drawTowerSegment(ctx, baseX, roofX, towerWidth, bottom, top, bottom, top, false, columnWidth);
   ctx.fillStyle = "#0f7b7e";
   ctx.save();
   ctx.shadowColor = "rgba(20, 33, 42, .20)";
@@ -639,6 +643,12 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     const pivotX = roofX;
     const pivotY = top + 2;
     const geometry = P.pendulumGeometry(run.tower, d, sample.sway);
+    // City uses taller schematic walls; place the mounts on those straight walls.
+    // The pendulum still uses the same angle and a fixed, uniformly scaled length.
+    geometry.mountSlope = sample.sway * scale / (bottom - top);
+    const shearOffset = -geometry.mountSlope * (geometry.anchorY - top);
+    geometry.leftAnchorOffset = -towerWidth / 2 + shearOffset;
+    geometry.rightAnchorOffset = towerWidth / 2 + shearOffset;
     const Lpx = geometry.lengthPx;
     const bobR = geometry.bobRadiusPx;
     const drawTheta = sample.theta * P.pendulumAngleScale;
@@ -647,7 +657,7 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     const anchorY = geometry.anchorY;
     const leftAnchorX = pivotX + geometry.leftAnchorOffset;
     const rightAnchorX = pivotX + geometry.rightAnchorOffset;
-    // Use the same column mounts and bob position as the contact detector.
+    // Keep each hydraulic mount on the displayed column.
     const drawOffset = Math.sin(drawTheta) * Lpx;
     const bobX = pivotX + drawOffset;
     const bobY = pivotY + Math.cos(drawTheta) * Lpx;
@@ -997,9 +1007,7 @@ function renderRoom() {
   const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[phase] || phase;
   const site = typeof location !== "undefined" ? location.host : "";
   $("roomState").innerHTML = `<div class="room-banner"><div class="join-callout">${site ? `<span>Join at <strong>${escapeHtml(site)}</strong> with code</span>` : "<span>Room code</span>"}<span class="room-code">${escapeHtml(currentRoom.code)}</span></div></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
-  const steps = [["design", "Design"], ["locked", "Locked"], ["running", "Earthquake"]];
-  const stepIndex = steps.findIndex(([key]) => key === phase);
-  $("phaseSteps").innerHTML = steps.map(([key, label], i) => `<li class="phase-step step-${key}${i === stepIndex ? " current" : i < stepIndex ? " done" : ""}"${i === stepIndex ? ' aria-current="step"' : ""}><span class="step-number">${i + 1}</span>${label}</li>`).join("");
+  $("phaseSteps").textContent = `Status: ${phaseLabel}`;
   $("studentState").textContent = `Room ${currentRoom.code} · ${phaseLabel}`;
   $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" title="Remove group" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
   const wasLocked = $("submitLength").disabled;

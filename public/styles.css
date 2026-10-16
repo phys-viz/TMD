@@ -667,20 +667,6 @@ th { color: #425160; }
 @media (max-width: 800px) { .challenge-layout { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { #student .panel, #teacher .panel { padding: 18px; } .tower-facts strong { font-size: 1.2rem; } .panel-heading { align-items: start; } }
 
-/* Teacher phase tracker: Design -> Locked -> Earthquake. */
-.phase-steps { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 12px 0 0; padding: 0; }
-.phase-step { display: flex; align-items: center; gap: 8px; flex: 1 1 140px; padding: 10px 14px; border: 1px solid #d8e1e6; border-radius: 10px; background: #f7f9fa; color: #8193a0; font-weight: 700; }
-.step-number { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #e2e8ec; color: #5b6b75; font-size: .9rem; }
-.phase-step.done { color: #4d6472; }
-.phase-step.done .step-number { background: #c9d6dd; }
-.phase-step.current { color: white; border-color: transparent; box-shadow: 0 5px 14px rgba(20, 33, 42, .14); }
-.phase-step.current .step-number { background: rgba(255, 255, 255, .25); color: white; }
-.step-design.current { background: var(--good); }
-.step-locked.current { background: var(--warn); }
-.step-running.current { background: var(--bad); }
-#roster th.num, #roster td.num { text-align: right; font-variant-numeric: tabular-nums; }
-.room-danger { display: flex; justify-content: flex-end; margin-top: 28px; padding-top: 16px; border-top: 1px dashed #e3bcb7; }
-#teacher .room-danger .button-danger { font-size: .9rem; min-height: 38px; }
 
 /* Student: collapsed join strip and lock banner. */
 .challenge-layout.joined { grid-template-columns: minmax(0, 1fr); max-width: 960px; }
@@ -731,8 +717,13 @@ th { color: #425160; }
 .compare-mode .stage-pair { max-width: 1380px; gap: 64px; }
 .axis-time { font-weight: 750; }
 #teacher .control-block { margin-block: 12px; }
-.teacher-gameplay button { background: white; color: var(--section-accent); border: 1px solid var(--section-border); box-shadow: none; }
-.teacher-gameplay #startBtn { background: var(--section-accent); color: white; }
+#teacher .teacher-gameplay { border: 1px solid #c6d3db; background: #f7f9fa; gap: 12px; padding: 14px; }
+#teacher .teacher-gameplay h3 { margin: 0; padding: 0; background: none; color: #314b59; border-radius: 0; }
+#teacher .teacher-gameplay .room-phase { margin: 0; color: #314b59; font-weight: 650; }
+#teacher .teacher-gameplay .earthquake-actions { margin: 0; }
+#teacher .teacher-gameplay button { min-height: 40px; padding: 8px 16px; font-size: .95rem; border: 1px solid #9aaeb9; box-shadow: none; }
+#teacher .teacher-gameplay .button-primary { background: #245e9b; color: white; border-color: #245e9b; }
+#teacher .teacher-gameplay .button-secondary { background: white; color: #314b59; }
 #roomDifficulty { border-color: var(--section-border); color: var(--section-accent); font-weight: 750; }
 @media (max-width: 600px) {
  .stage-wrap { grid-template-columns: minmax(0, 1fr); }

@@ -494,7 +494,7 @@ for (const count of [1, 12]) for (const height of [170, 350]) for (const theta o
   const foundations = commands.filter(d => d.method === "roundRect" && d.fillColor === "#cedee5");
   const desiredHeight = 180 + (height - 170) / 180 * 160;
   assert(Math.abs((foundations[0].args[1] + 8 - layout.top) * displayScale - desiredHeight) < 1e-9,
-    "City keeps its intended skyline height while extending only the lower shaft");
+    "City keeps its intended skyline height without stretching the pendulum");
 }
 // The original buckle remains, followed by a ground-level rubble ending.
 function collapseDrawing(age) {
@@ -576,6 +576,14 @@ vm.runInContext("playQuakeWarning(200)", app);
 assert.equal(warningOscillators.length, 6, "a new intro can sound after unmuting");
 dom.roster.querySelector = () => ({ innerHTML: "" });
 vm.runInContext(`currentRoom.config = { difficulty: "medium", amplitude: .62, pulseDuration: 3 }; currentRoom.students[0].id = "assigned-pair"; currentStudent = currentRoom.students[0]; currentStudent.submission = null; renderRoom()`, app);
+const savedRoomPhase = vm.runInContext("currentRoom.phase", app);
+for (const [phase, label, primary] of [["design", "Open for designs", "lockBtn"], ["locked", "Designs locked", "startBtn"], ["running", "Testing", "replayBtn"]]) {
+  vm.runInContext(`currentRoom.phase = "${phase}"; renderRoom()`, app);
+  assert.equal(dom.phaseSteps.textContent, `Status: ${label}`, "teacher sees a plain current status");
+  const primaryButtons = ["lockBtn", "startBtn", "replayBtn", "unlockBtn"].filter(id => !dom[id].hidden && dom[id].className === "button-primary");
+  assert.deepEqual(primaryButtons, [primary], "only the next action receives primary emphasis");
+}
+vm.runInContext(`currentRoom.phase = "${savedRoomPhase}"; renderRoom()`, app);
 assert(!dom.studentTower.innerHTML.includes("Natural period"), "challenge hides the period");
 assert(!dom.studentTower.innerHTML.includes("calculated length"), "challenge hides the calculated TMD length");
 assert(dom.studentTower.innerHTML.includes("Use this height and mass in the Solo Lab"), "assignment explains the independent lab workflow");
@@ -588,7 +596,7 @@ assert.equal(dom.teacher.classList.contains("active"), false, "locked teachers c
 assert.equal(dom.teacherLogin.classList.contains("active"), true, "Teacher tab opens the password form");
 vm.runInContext("teacherUnlocked = true; setView('teacher')", app);
 assert.equal(dom.teacher.classList.contains("active"), true, "authenticated teachers can open the dashboard");
-// City keeps the upper cutaway geometry intact; mounts stay on both columns while swaying.
+// City walls remain straight and mounts sit on the displayed columns while swaying.
 for (const height of [170, 350]) for (const mass of [7.5e6, 15e6]) for (const sway of [-.8, .8]) {
   dom.cityCanvas.ctx.drawings.length = 0;
   vm.runInContext(`currentRoom = {
@@ -602,13 +610,20 @@ for (const height of [170, 350]) for (const mass of [7.5e6, 15e6]) for (const sw
   const layout = P.towerGeometry(tower);
   const g = P.pendulumGeometry(tower, { enabled: true, length: 10.3, massRatio: .04, damping: .45 }, sway);
   const commands = dom.cityCanvas.ctx.drawings;
+  const columnsIndex = commands.findIndex(d => d.method === "stroke" && d.width === layout.columnWidth && d.color === "#1e2d36");
+  const columnCommands = commands.slice(0, columnsIndex);
+  const columnPathStart = columnCommands.findLastIndex(d => d.method === "beginPath");
+  const columnPath = columnCommands.slice(columnPathStart);
+  assert.equal(columnPath.filter(d => d.method === "moveTo").length, 2, "City draws two continuous walls");
+  assert.equal(columnPath.filter(d => d.method === "lineTo").length, 2, "each wall is a single straight segment without a bend");
   const housings = commands.map((command, index) => ({ ...command, index })).filter(d => d.method === "stroke" && d.width === 8 && /^rgb/.test(d.color));
   assert.equal(housings.length, 2);
   housings.forEach((housing, index) => {
     const mount = commands.slice(0, housing.index).findLast(d => d.method === "moveTo").args;
     const side = index === 0 ? -1 : 1;
-    const wallX = layout.width / 2 + .3 * layout.swayScale + sway * layout.swayScale * (layout.bottom - g.anchorY) / (layout.bottom - layout.top) + side * layout.towerWidth / 2;
-    assert(Math.abs(mount[0] - wallX) < 1e-9 && mount[1] === g.anchorY, "City housing stays attached to the same moving column used in Solo and contact detection");
+    const foundationY = layout.top + (180 + (height - 170) / 180 * 160) / .3;
+    const wallX = layout.width / 2 + .3 * layout.swayScale + sway * layout.swayScale * (foundationY - g.anchorY) / (foundationY - layout.top) + side * layout.towerWidth / 2;
+    assert(Math.abs(mount[0] - wallX) < 1e-9 && mount[1] === g.anchorY, "City housing stays attached to the straight displayed column");
   });
 }
 // Uneven browser frames produce exactly the same trial as official fixed-step scoring.
