@@ -22,6 +22,7 @@ let checkingTeacherRooms = null;
 const savedRoomLoads = new Map();
 let startingQuake = false;
 let cityStart = 0;
+let skippedCityQuake = null;
 let lastCityStartedAt = 0;
 let lastStudentQuake = "";
 let quakeAudio = null;
@@ -1220,6 +1221,10 @@ function cityFinalSample(result) {
   return Array.isArray(s) ? s.at(-1) : s?.end;
 }
 
+function canSkipCityResults() {
+  return teacherUnlocked && !currentStudent && currentRoom && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
+}
+
 function renderCity() {
   const canvas = $("cityCanvas");
   const ctx = canvas.getContext("2d");
@@ -1240,7 +1245,9 @@ function renderCity() {
   }
   $("cityCaption").textContent = `Room ${currentRoom.code}: ${roomScenarioText(currentRoom.config)} - same settings for every tower.`;
   $("quakeBadge").textContent = pulse ? `${DIFFICULTY[pulse.difficulty]?.label || "Medium"}: ${fmt(pulse.amplitude)} m` : "Waiting";
-  const t = currentRoom.phase === "running" ? Math.min(Math.max(0, (performance.now() - cityStart) / 1000), (pulse?.runDuration || RUN_DURATION) + 3.6) : 0;
+  const skipped = canSkipCityResults() && skippedCityQuake?.code === currentRoom.code && skippedCityQuake?.startedAt === pulse?.startedAt;
+  const t = currentRoom.phase === "running" ? skipped ? (pulse?.runDuration || RUN_DURATION) + 3.6
+    : Math.min(Math.max(0, (performance.now() - cityStart) / 1000), (pulse?.runDuration || RUN_DURATION) + 3.6) : 0;
   const running = currentRoom.phase === "running" && !!pulse;
   const remaining = running ? Math.max(0, (cityStart - performance.now()) / 1000) : 0;
   const preparing = pulse?.preparing === true;
@@ -1248,7 +1255,7 @@ function renderCity() {
   $("quakeIntro").hidden = !intro;
   canvas.hidden = intro;
   $("cityResults").hidden = intro || (running && t < (pulse.runDuration || RUN_DURATION) + 3.6);
-  $("skipResultsBtn").hidden = !running || intro || t >= (pulse.runDuration || RUN_DURATION) + 3.6;
+  $("skipResultsBtn").hidden = !canSkipCityResults() || !running || intro || t >= (pulse.runDuration || RUN_DURATION) + 3.6;
   if (intro) {
     if (!startingQuake && pulse) playQuakeWarning(pulse.id || pulse.startedAt);
     $("quakeCountdown").textContent = startingQuake ? "Sending earthquake alert…"
@@ -1799,10 +1806,10 @@ async function runQuake(action) {
   }
 }
 $("startBtn").addEventListener("click", () => runQuake("start"));
-// Scores are computed when the quake starts, so skipping only fast-forwards the animation.
+// Only an unjoined teacher may skip their own playback; students keep the shared clock.
 $("skipResultsBtn").addEventListener("click", () => {
-  if (!currentRoom?.quake || currentRoom.phase !== "running") return;
-  cityStart = performance.now() - ((currentRoom.quake.runDuration || RUN_DURATION) + 3.6) * 1000;
+  if (!canSkipCityResults() || !currentRoom.quake || currentRoom.phase !== "running" || currentRoom.quake.preparing || startingQuake || performance.now() < cityStart) return;
+  skippedCityQuake = { code: currentRoom.code, startedAt: currentRoom.quake.startedAt };
   renderCity();
 });
 $("replayBtn").addEventListener("click", () => runQuake("replay"));
