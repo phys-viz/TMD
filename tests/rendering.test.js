@@ -136,6 +136,20 @@ assert.equal(Number(dom.compareDampingInput.value), 0, "comparison starts with z
 assert.equal(Number(dom.submitDamping.value), 0, "new challenge submissions start with zero damping");
 assert.strictEqual(vm.runInContext("graphRange().start", app), 0, "Solo graph starts at zero by default");
 assert.strictEqual(vm.runInContext("graphRange().end", app), 120, "Solo graph shows the full 120-second trial by default");
+const primaryTmdFields = ["lengthInput", "massInput", "dampingInput", "dampingSlider"];
+const comparisonTmdFields = ["compareLengthInput", "compareMassInput", "compareDampingInput", "compareDampingSlider"];
+const savedTmdValues = primaryTmdFields.map(id => String(dom[id].value));
+assert.equal(dom.earthquakeStatus.hidden, true, "idle earthquake controls contain no explanatory paragraph");
+assert(primaryTmdFields.every(id => dom[id].disabled === false), "installed Solo TMD controls are enabled");
+dom.damperEnabled.checked = false;
+dom.damperEnabled.dispatch("input");
+assert(primaryTmdFields.every(id => dom[id].disabled === true), "uninstalling the TMD disables all its numeric inputs and slider");
+assert.deepEqual(primaryTmdFields.map(id => String(dom[id].value)), savedTmdValues, "uninstalling preserves the chosen settings");
+assert.equal(state().damper.enabled, false, "unchecked TMD is also absent from the model");
+dom.damperEnabled.checked = true;
+dom.damperEnabled.dispatch("input");
+assert(primaryTmdFields.every(id => dom[id].disabled === false), "reinstalling re-enables its controls");
+assert.deepEqual(primaryTmdFields.map(id => String(dom[id].value)), savedTmdValues, "reinstalling restores the same choices");
 const geometry = () => ({
   roof: dom.stage.ctx.drawings.find(d => d.method === "roundRect" && d.args[3] === 18).args,
   column: dom.stage.ctx.drawings.find(d => d.method === "stroke" && d.color === "#1e2d36").width
@@ -222,6 +236,8 @@ assert.strictEqual(comparison().tower, state().tower, "comparison towers have id
 assert.strictEqual(comparison().pulse, state().pulse, "comparison towers receive exactly the same earthquake and difficulty");
 assert.strictEqual(comparison().damper.enabled, false, "Tower A starts without a TMD");
 assert.strictEqual(state().damper.enabled, true, "Tower B retains the student's installed TMD");
+assert(comparisonTmdFields.every(id => dom[id].disabled === true), "Tower A's uninstalled TMD controls start disabled");
+assert(primaryTmdFields.every(id => dom[id].disabled === false), "Tower B remains independently editable");
 assert.strictEqual(comparison().damper.length, state().damper.length, "the comparison starts from the current TMD design");
 assert.strictEqual(dom.compareTower.hidden, false, "Compare displays the second tower");
 assert.strictEqual(vm.runInContext("graphRange(true).end", app), 120, "Tower A also defaults to the full trial");
@@ -244,6 +260,8 @@ assert(state().state.t > pausedTime, "shared Start resumes the paused trial");
 
 dom.compareDamperEnabled.checked = true;
 dom.compareDamperEnabled.dispatch("input");
+assert(comparisonTmdFields.every(id => dom[id].disabled === false), "installing Tower A enables its own fields");
+assert(primaryTmdFields.every(id => dom[id].disabled === false), "Tower A's toggle does not disable Tower B");
 vm.runInContext("for (let i = 0; i < 100; i++) stepLive(0.02)", app);
 assert.deepStrictEqual(comparison().state, state().state, "identical TMD designs produce identical coupled motion");
 dom.compareLengthInput.value = "2";

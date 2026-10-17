@@ -206,6 +206,12 @@ function labRuns() {
 }
 
 function updateLabels() {
+  for (const [toggle, fields] of [
+    ["damperEnabled", ["lengthInput", "massInput", "dampingInput", "dampingSlider"]],
+    ["compareDamperEnabled", ["compareLengthInput", "compareMassInput", "compareDampingInput", "compareDampingSlider"]]
+  ]) {
+    for (const id of fields) $(id).disabled = !$(toggle).checked;
+  }
   [["dampingInput", "dampingSlider"], ["compareDampingInput", "compareDampingSlider"]].forEach(([inputId, sliderId]) => {
     const value = P.clamp(Number($(inputId).value), 0, 1);
     $(sliderId).value = value;
@@ -895,7 +901,9 @@ function renderLab() {
   const maxY = graphSwayScale();
   drawGraph(sim, false, maxY);
   if (compareSim) drawGraph(compareSim, true, maxY);
-  $("earthquakeStatus").textContent = labRuns().every(run => run.failed) ? "Reset to try a new TMD design." : labTime === 0 ? "A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops." : labTime < sim.pulse.duration ? "Earthquake in progress: the ground is shaking." : "Ground stopped: measure the building's period now. Turn the TMD off to measure its natural period.";
+  const quakeStatus = labRuns().every(run => run.failed) ? "Trial ended." : labTime === 0 ? "" : labPaused ? "Paused." : labTime < sim.pulse.duration ? "Ground shaking." : "Ground stopped.";
+  $("earthquakeStatus").textContent = quakeStatus;
+  $("earthquakeStatus").hidden = !quakeStatus;
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
   const dangerToggle = $("showDangerInput");
   dangerToggle.disabled = !dangerEnabled;
@@ -1014,7 +1022,7 @@ function renderRoomSettings(teacher) {
   $("applyRoomSettingsBtn").hidden = !currentRoom;
   if (!currentRoom) {
     for (const id of ["activeRoomSettings", "activeRoomDifficulty", "activeRoomStrength"]) $(id).disabled = !teacher || creatingRoom;
-    $("activeRoomSettingsStatus").textContent = "Choose difficulty and strength for the new room.";
+    $("activeRoomSettingsStatus").textContent = "";
     return;
   }
   const signature = `${currentRoom.config.difficulty}:${currentRoom.config.amplitude}`;
@@ -1040,8 +1048,7 @@ function renderRoomSettings(teacher) {
     $("startBtn").disabled = true;
   }
   if (!applyingRoomSettings) $("activeRoomSettingsStatus").textContent = currentRoom.phase !== "design"
-    ? "Unlock for revisions to change the next round."
-    : dirty ? "Apply your changes before locking or starting." : "Settings are saved. Towers and submitted designs stay in this room.";
+    ? "" : dirty ? "Unapplied changes." : "";
 }
 
 function renderRoom() {
@@ -1725,3 +1732,13 @@ if (typeof fetch !== "undefined") {
     renderRoom();
   }).catch(() => {});
 }
+
+// Help is available on hover or keyboard focus, and Escape dismisses it.
+document.querySelectorAll("[data-help]").forEach(control => {
+  control.addEventListener("keydown", event => {
+    if (event.key === "Escape") control.dataset.helpDismissed = "true";
+  });
+  for (const event of ["pointerenter", "pointerleave", "focusin", "focusout"]) {
+    control.addEventListener(event, () => { delete control.dataset.helpDismissed; });
+  }
+});

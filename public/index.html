@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-37">
+  <link rel="stylesheet" href="/styles.css?v=classroom-38">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -38,23 +38,23 @@
           <div class="control-block earthquake-controls" role="group" aria-labelledby="earthquakeHeading">
             <h3 id="earthquakeHeading">Earthquake</h3>
             <div id="earthquakeStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
-              <button type="button" data-strength="gentle" aria-pressed="false">Gentle</button>
-              <button type="button" data-strength="moderate" aria-pressed="true">Moderate</button>
-              <button type="button" data-strength="strong" aria-pressed="false">Strong</button>
+              <button type="button" data-strength="gentle" aria-pressed="false" data-help="A weaker earthquake. All strengths use the same 3-second waveform." aria-description="A weaker earthquake. All strengths use the same 3-second waveform." aria-label="Gentle">Gentle</button>
+              <button type="button" data-strength="moderate" aria-pressed="true" data-help="A medium-strength earthquake. All strengths use the same 3-second waveform." aria-description="A medium-strength earthquake. All strengths use the same 3-second waveform." aria-label="Moderate">Moderate</button>
+              <button type="button" data-strength="strong" aria-pressed="false" data-help="A stronger earthquake. All strengths use the same 3-second waveform." aria-description="A stronger earthquake. All strengths use the same 3-second waveform." aria-label="Strong">Strong</button>
             </div>
             <div class="button-row run-row">
-              <button id="playBtn">Start earthquake</button>
-              <button id="pauseBtn">Pause</button>
-              <button id="resetBtn">Reset</button>
+              <button id="playBtn" data-help="Start the selected 3-second earthquake, or resume a paused trial." aria-description="Start the selected 3-second earthquake, or resume a paused trial." aria-label="Start earthquake">Start earthquake</button>
+              <button id="pauseBtn" data-help="Pause the trial. Use Start earthquake to resume." aria-description="Pause the trial. Use Start earthquake to resume." aria-label="Pause">Pause</button>
+              <button id="resetBtn" data-help="Clear the motion and graphs while keeping your tower and TMD settings." aria-description="Clear the motion and graphs while keeping your tower and TMD settings." aria-label="Reset">Reset</button>
             </div>
-            <p class="muted" id="earthquakeStatus" role="status">A brief earthquake shakes the ground for 3.0 seconds. Measure the tower's period after the ground stops.</p>
+            <p class="muted" id="earthquakeStatus" role="status" hidden></p>
           </div>
           <div class="control-block difficulty-controls" role="group" aria-labelledby="difficultyHeading">
             <h3 id="difficultyHeading">Difficulty</h3>
             <div class="mode-row" aria-label="Difficulty mode">
-              <label><input type="radio" name="difficultyMode" value="easy" checked> Easy</label>
-              <label><input type="radio" name="difficultyMode" value="medium"> Medium</label>
-              <label><input type="radio" name="difficultyMode" value="hard"> Hard</label>
+              <label data-help="No danger-zone collapse. Pendulum contact still fails the tower."><input type="radio" name="difficultyMode" value="easy" checked aria-label="Easy" aria-description="No danger-zone collapse. Pendulum contact still fails the tower."> Easy</label>
+              <label data-help="Collapse after 3.00 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."><input type="radio" name="difficultyMode" value="medium" aria-label="Medium" aria-description="Collapse after 3.00 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."> Medium</label>
+              <label data-help="Collapse after 2.50 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."><input type="radio" name="difficultyMode" value="hard" aria-label="Hard" aria-description="Collapse after 2.50 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."> Hard</label>
             </div>
             <label class="check"><input id="showDangerInput" type="checkbox" checked> Show danger zone</label>
 
@@ -163,21 +163,19 @@
       <div class="two-col teacher-layout">
         <form id="roomForm" class="panel">
           <h2>Room setup</h2>
-          <p class="section-intro">Use these settings to create a room or revise the open room while unlocked.</p>
           <fieldset id="activeRoomSettings" class="active-room-settings" disabled>
             <legend>Earthquake and difficulty</legend>
-            <label>Difficulty<select id="activeRoomDifficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
-            <label>Earthquake strength<select id="activeRoomStrength"><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
-            <button id="applyRoomSettingsBtn" class="button-secondary" type="button" hidden>Apply settings</button>
+            <label data-help="Easy disables danger-zone collapse. Medium allows 3.00 seconds beyond the sway limit; Hard allows 2.50 seconds. Pendulum contact still fails.">Difficulty<select id="activeRoomDifficulty" aria-label="Difficulty" aria-description="Easy disables danger-zone collapse. Medium allows 3.00 seconds beyond the sway limit; Hard allows 2.50 seconds. Pendulum contact still fails."><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
+            <label data-help="Choose shaking strength. Gentle, Moderate and Strong use the same 3-second waveform.">Earthquake strength<select id="activeRoomStrength" aria-label="Earthquake strength" aria-description="Choose shaking strength. Gentle, Moderate and Strong use the same 3-second waveform."><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
+            <button id="applyRoomSettingsBtn" class="button-secondary" type="button" hidden data-help="Save difficulty and strength for this unlocked room; keep its towers and submitted designs." aria-description="Save difficulty and strength for this unlocked room; keep its towers and submitted designs." aria-label="Apply settings">Apply settings</button>
           </fieldset>
           <p id="activeRoomSettingsStatus" class="muted" role="status"></p>
           <label>New room seed <input id="roomSeed" value="period-window-a"></label>
           <label>New room run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
           <div class="button-row">
             <button id="createRoomBtn">Create room</button>
-            <button id="previewClassBtn" class="button-secondary" type="button">Preview 12-pair class</button>
+            <button id="previewClassBtn" class="button-secondary" type="button" data-help="Create a separate room with 12 demo groups and varied designs." aria-description="Create a separate room with 12 demo groups and varied designs." aria-label="Preview 12-pair class">Preview 12-pair class</button>
           </div>
-          <p class="muted">Preview creates a separate room with 12 demo pairs and varied designs. Use Start earthquake to test the class.</p>
           <p id="previewState" class="muted" role="status"></p>
         </form>
         <div class="panel">
@@ -194,10 +192,10 @@
           <h3>Earthquake controls</h3>
           <p id="phaseSteps" class="room-phase" role="status"></p>
           <div class="button-row earthquake-actions">
-            <button id="lockBtn" class="button-primary">Lock designs</button>
-            <button id="startBtn" class="button-secondary">Start earthquake</button>
-            <button id="replayBtn" class="button-secondary">Replay earthquake</button>
-            <button id="unlockBtn" class="button-secondary">Unlock for revisions</button>
+            <button id="lockBtn" class="button-primary" data-help="Freeze submitted designs and room settings for the next earthquake." aria-description="Freeze submitted designs and room settings for the next earthquake." aria-label="Lock designs">Lock designs</button>
+            <button id="startBtn" class="button-secondary" data-help="Run the selected earthquake for everyone in this room." aria-description="Run the selected earthquake for everyone in this room." aria-label="Start earthquake">Start earthquake</button>
+            <button id="replayBtn" class="button-secondary" data-help="Repeat the earthquake with the saved settings and designs." aria-description="Repeat the earthquake with the saved settings and designs." aria-label="Replay earthquake">Replay earthquake</button>
+            <button id="unlockBtn" class="button-secondary" data-help="Reopen the same room for design, difficulty and earthquake-strength revisions." aria-description="Reopen the same room for design, difficulty and earthquake-strength revisions." aria-label="Unlock for revisions">Unlock for revisions</button>
           </div>
           </div>
           <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3></div>
@@ -242,6 +240,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-44"></script>
+  <script src="/app.js?v=classroom-45"></script>
 </body>
 </html>

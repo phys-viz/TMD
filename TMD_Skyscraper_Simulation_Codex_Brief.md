@@ -124,3 +124,5 @@ After students understand natural period and TMD tuning, consider sustained exci
 Continue tuning parameter ranges, game tolerances, time budgets, and scoring from teacher trials. Revisit the documented presets and regression cases whenever the agreed learning goals or game behavior change.
 
 Solo, Compare, and student design controls explicitly connect the acronym to the design choices: T - Tuning (length in meters), M - Mass (percentage of tower mass), and D - Damping. These labels add no controls or calculated tuning answers. Hydraulic heating visuals are unchanged.
+
+When Install TMD is unchecked, disable that tower's length, mass, damping number, and damping slider, retaining their values for reinstallation. Compare panels enable independently. Remove static explanations under earthquake settings; keep short live shaking/stopped feedback and essential unsaved/error messages. Brief earthquake/difficulty help appears on hover or keyboard focus and dismisses with Escape, with accessible control descriptions.
