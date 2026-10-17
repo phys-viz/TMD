@@ -981,7 +981,8 @@ function clearDeletedRoom(code, reason = "deleted") {
     $("applyRoomSettingsBtn").disabled = true;
     $("activeRoomSettingsStatus").textContent = "Open or create a room to choose settings.";
     $("roomState").textContent = unavailable ? "Room expired or no longer available. Create or open another room." : "Room deleted. Create or open another room.";
-    $("studentState").textContent = unavailable ? "This room expired or is no longer available." : "This room was deleted by the teacher.";
+    $("studentState").textContent = "";
+    $("studentState").hidden = true;
     $("studentTower").textContent = "Join a room to receive a tower.";
     $("submitState").textContent = "";
     $("designEntry").hidden = false;
@@ -1080,7 +1081,8 @@ function renderRoom() {
   const phaseLabel = { design: "Open for designs", locked: "Designs locked", running: "Testing" }[phase] || phase;
   $("roomState").innerHTML = `<div class="room-banner"><div class="join-callout"><span>JOIN CODE</span><span class="room-code">${escapeHtml(currentRoom.code)}</span></div></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
   $("phaseSteps").textContent = `Status: ${phaseLabel}`;
-  $("studentState").textContent = `Room ${currentRoom.code} / ${phaseLabel} / ${roomScenarioText(currentRoom.config)}`;
+  $("studentState").textContent = "";
+  $("studentState").hidden = true;
   $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
   const wasLocked = $("submitLength").disabled;
   const locked = phase !== "design" || !currentStudent;
@@ -1549,7 +1551,8 @@ $("joinForm").addEventListener("submit", async event => {
   const nickname = $("nickname").value.trim();
   // The server issues the token that identifies the group; its display name can change independently.
   const token = sessionStorage.getItem(key) || undefined;
-  $("studentState").textContent = "Joining room...";
+  $("studentState").textContent = "";
+  $("studentState").hidden = true;
   try {
     const data = await api(`/api/rooms/${code}/join`, { nickname, token });
     sessionStorage.setItem(key, data.token);
@@ -1565,6 +1568,7 @@ $("joinForm").addEventListener("submit", async event => {
     $("submitState").textContent = data.student.submission ? "Your saved design is restored. You can revise it before the room is locked." : "Enter your tested settings, then submit your design.";
   } catch (error) {
     $("studentState").textContent = `Could not join: ${error.message}`;
+    $("studentState").hidden = false;
     // A rejected rename leaves the group joined under its old name.
     if (token) return;
     currentStudent = null;

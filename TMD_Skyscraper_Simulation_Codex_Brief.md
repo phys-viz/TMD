@@ -128,3 +128,5 @@ Solo, Compare, and student design controls explicitly connect the acronym to the
 When Install TMD is unchecked, disable that tower's length, mass, damping number, and damping slider, retaining their values for reinstallation. Compare panels enable independently. Remove static explanations under earthquake settings; keep short live shaking/stopped feedback and essential unsaved/error messages. Remove all visible hover/focus help bubbles and native title tooltips across the app; retain accessible control descriptions.
 
 Saved teacher room entries are validated against the server on page load, when returning to the browser, and when focusing the room selector. Confirmed HTTP 404 responses remove stale saved entries; temporary network, quota, and service errors retain their private keys for retry. Room updates preserve the dropdown selection, and late events from a previous room cannot replace the current room. Rooms still expire after 24 hours.
+
+The Join Challenge panel omits the introductory tagline and routine status line beneath Join / reconnect. Only actionable join errors appear there when a join attempt fails.

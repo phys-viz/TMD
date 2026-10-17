@@ -123,11 +123,10 @@
         <form id="joinForm" class="panel">
           <div id="joinFields">
           <h2>Join Challenge</h2>
-          <p class="section-intro">Your group, your tower.</p>
           <label>Room code <input id="studentRoom" autocomplete="off" maxlength="8"></label>
           <label>Group name / names <input id="nickname" autocomplete="off" maxlength="24" value="Group"></label>
           <button>Join / reconnect</button>
-          <p id="studentState" class="muted"></p>
+          <p id="studentState" class="muted" role="alert" hidden></p>
           </div>
           <div id="joinedStrip" class="joined-strip" hidden>
             <span id="joinedSummary"></span>
@@ -239,6 +238,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-46"></script>
+  <script src="/app.js?v=classroom-47"></script>
 </body>
 </html>
