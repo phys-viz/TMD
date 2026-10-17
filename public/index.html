@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-38">
+  <link rel="stylesheet" href="/styles.css?v=classroom-39">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -38,23 +38,23 @@
           <div class="control-block earthquake-controls" role="group" aria-labelledby="earthquakeHeading">
             <h3 id="earthquakeHeading">Earthquake</h3>
             <div id="earthquakeStrength" class="strength-buttons" role="group" aria-label="Earthquake strength">
-              <button type="button" data-strength="gentle" aria-pressed="false" data-help="A weaker earthquake. All strengths use the same 3-second waveform." aria-description="A weaker earthquake. All strengths use the same 3-second waveform." aria-label="Gentle">Gentle</button>
-              <button type="button" data-strength="moderate" aria-pressed="true" data-help="A medium-strength earthquake. All strengths use the same 3-second waveform." aria-description="A medium-strength earthquake. All strengths use the same 3-second waveform." aria-label="Moderate">Moderate</button>
-              <button type="button" data-strength="strong" aria-pressed="false" data-help="A stronger earthquake. All strengths use the same 3-second waveform." aria-description="A stronger earthquake. All strengths use the same 3-second waveform." aria-label="Strong">Strong</button>
+              <button type="button" data-strength="gentle" aria-pressed="false" aria-description="A weaker earthquake. All strengths use the same 3-second waveform." aria-label="Gentle">Gentle</button>
+              <button type="button" data-strength="moderate" aria-pressed="true" aria-description="A medium-strength earthquake. All strengths use the same 3-second waveform." aria-label="Moderate">Moderate</button>
+              <button type="button" data-strength="strong" aria-pressed="false" aria-description="A stronger earthquake. All strengths use the same 3-second waveform." aria-label="Strong">Strong</button>
             </div>
             <div class="button-row run-row">
-              <button id="playBtn" data-help="Start the selected 3-second earthquake, or resume a paused trial." aria-description="Start the selected 3-second earthquake, or resume a paused trial." aria-label="Start earthquake">Start earthquake</button>
-              <button id="pauseBtn" data-help="Pause the trial. Use Start earthquake to resume." aria-description="Pause the trial. Use Start earthquake to resume." aria-label="Pause">Pause</button>
-              <button id="resetBtn" data-help="Clear the motion and graphs while keeping your tower and TMD settings." aria-description="Clear the motion and graphs while keeping your tower and TMD settings." aria-label="Reset">Reset</button>
+              <button id="playBtn" aria-description="Start the selected 3-second earthquake, or resume a paused trial." aria-label="Start earthquake">Start earthquake</button>
+              <button id="pauseBtn" aria-description="Pause the trial. Use Start earthquake to resume." aria-label="Pause">Pause</button>
+              <button id="resetBtn" aria-description="Clear the motion and graphs while keeping your tower and TMD settings." aria-label="Reset">Reset</button>
             </div>
             <p class="muted" id="earthquakeStatus" role="status" hidden></p>
           </div>
           <div class="control-block difficulty-controls" role="group" aria-labelledby="difficultyHeading">
             <h3 id="difficultyHeading">Difficulty</h3>
             <div class="mode-row" aria-label="Difficulty mode">
-              <label data-help="No danger-zone collapse. Pendulum contact still fails the tower."><input type="radio" name="difficultyMode" value="easy" checked aria-label="Easy" aria-description="No danger-zone collapse. Pendulum contact still fails the tower."> Easy</label>
-              <label data-help="Collapse after 3.00 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."><input type="radio" name="difficultyMode" value="medium" aria-label="Medium" aria-description="Collapse after 3.00 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."> Medium</label>
-              <label data-help="Collapse after 2.50 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."><input type="radio" name="difficultyMode" value="hard" aria-label="Hard" aria-description="Collapse after 2.50 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."> Hard</label>
+              <label><input type="radio" name="difficultyMode" value="easy" checked aria-label="Easy" aria-description="No danger-zone collapse. Pendulum contact still fails the tower."> Easy</label>
+              <label><input type="radio" name="difficultyMode" value="medium" aria-label="Medium" aria-description="Collapse after 3.00 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."> Medium</label>
+              <label><input type="radio" name="difficultyMode" value="hard" aria-label="Hard" aria-description="Collapse after 2.50 seconds total beyond the sway limit, after shaking stops. Pendulum contact also fails."> Hard</label>
             </div>
             <label class="check"><input id="showDangerInput" type="checkbox" checked> Show danger zone</label>
 
@@ -67,21 +67,21 @@
               <div class="control-block tmd-controls" role="group" aria-labelledby="compareTmdHeading">
                 <div class="tmd-settings-row">
                   <h3 id="compareTmdHeading">Tower A</h3>
-                  <label class="check" title="Install TMD"><input id="compareDamperEnabled" type="checkbox" aria-label="Install Tower A TMD"> TMD</label>
+                  <label class="check"><input id="compareDamperEnabled" type="checkbox" aria-label="Install Tower A TMD"> TMD</label>
                   <div class="field-row three">
-                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
-                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <div class="damping-field"><label for="compareDampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower A damping" title="0: free; resistance rises toward 1: locked"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
+                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4"></label>
+                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5"></label>
+                    <div class="damping-field"><label for="compareDampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower A damping"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0"></div></div>
                   </div>
                 </div>
               </div>
               <canvas id="stageCompare" width="420" height="480" aria-label="Tower A motion"></canvas>
               <div class="graph-wrap">
-                <canvas id="graphCompare" width="560" height="210" aria-label="Tower A roof sway over time" aria-describedby="compareDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
-                <label class="axis-time axis-start" title="Edit graph start time">
+                <canvas id="graphCompare" width="560" height="210" aria-label="Tower A roof sway over time" aria-describedby="compareDangerTime"></canvas>
+                <label class="axis-time axis-start">
                   <input id="compareGraphStartInput" aria-label="Tower A graph start time in seconds" type="number" min="0" max="120" step="0.01" value="0"><span aria-hidden="true">s</span>
                 </label>
-                <label class="axis-time axis-end" title="Edit graph end time">
+                <label class="axis-time axis-end">
                   <input id="compareGraphEndInput" aria-label="Tower A graph end time in seconds" type="number" min="1" max="120" step="0.01" value="120"><span aria-hidden="true">s</span>
                 </label>
                 <span id="compareFailure" class="sr-only" role="status"></span>
@@ -92,21 +92,21 @@
               <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
                 <div class="tmd-settings-row">
                   <h3 id="tmdHeading">Tower</h3>
-                  <label class="check" title="Install TMD"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD" checked> TMD</label>
+                  <label class="check"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD" checked> TMD</label>
                   <div class="field-row three">
-                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
-                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <div class="damping-field"><label for="dampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower damping" title="0: free; resistance rises toward 1: locked"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
+                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4"></label>
+                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5"></label>
+                    <div class="damping-field"><label for="dampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower damping"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0"></div></div>
                   </div>
                 </div>
               </div>
               <canvas id="stage" width="420" height="480" aria-label="Tower motion"></canvas>
               <div class="graph-wrap">
-                <canvas id="graph" width="560" height="210" aria-label="Tower roof sway over time" aria-describedby="primaryDangerTime" title="Click the plot to place two time cursors; edit the time limits below"></canvas>
-                <label class="axis-time axis-start" title="Edit graph start time">
+                <canvas id="graph" width="560" height="210" aria-label="Tower roof sway over time" aria-describedby="primaryDangerTime"></canvas>
+                <label class="axis-time axis-start">
                   <input id="graphStartInput" aria-label="Tower graph start time in seconds" type="number" min="0" max="120" step="0.01" value="0"><span aria-hidden="true">s</span>
                 </label>
-                <label class="axis-time axis-end" title="Edit graph end time">
+                <label class="axis-time axis-end">
                   <input id="graphEndInput" aria-label="Tower graph end time in seconds" type="number" min="1" max="120" step="0.01" value="120"><span aria-hidden="true">s</span>
                 </label>
                 <span id="primaryFailure" class="sr-only" role="status"></span>
@@ -165,16 +165,16 @@
           <h2>Room setup</h2>
           <fieldset id="activeRoomSettings" class="active-room-settings" disabled>
             <legend>Earthquake and difficulty</legend>
-            <label data-help="Easy disables danger-zone collapse. Medium allows 3.00 seconds beyond the sway limit; Hard allows 2.50 seconds. Pendulum contact still fails.">Difficulty<select id="activeRoomDifficulty" aria-label="Difficulty" aria-description="Easy disables danger-zone collapse. Medium allows 3.00 seconds beyond the sway limit; Hard allows 2.50 seconds. Pendulum contact still fails."><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
-            <label data-help="Choose shaking strength. Gentle, Moderate and Strong use the same 3-second waveform.">Earthquake strength<select id="activeRoomStrength" aria-label="Earthquake strength" aria-description="Choose shaking strength. Gentle, Moderate and Strong use the same 3-second waveform."><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
-            <button id="applyRoomSettingsBtn" class="button-secondary" type="button" hidden data-help="Save difficulty and strength for this unlocked room; keep its towers and submitted designs." aria-description="Save difficulty and strength for this unlocked room; keep its towers and submitted designs." aria-label="Apply settings">Apply settings</button>
+            <label>Difficulty<select id="activeRoomDifficulty" aria-label="Difficulty" aria-description="Easy disables danger-zone collapse. Medium allows 3.00 seconds beyond the sway limit; Hard allows 2.50 seconds. Pendulum contact still fails."><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
+            <label>Earthquake strength<select id="activeRoomStrength" aria-label="Earthquake strength" aria-description="Choose shaking strength. Gentle, Moderate and Strong use the same 3-second waveform."><option value="gentle">Gentle</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
+            <button id="applyRoomSettingsBtn" class="button-secondary" type="button" hidden aria-description="Save difficulty and strength for this unlocked room; keep its towers and submitted designs." aria-label="Apply settings">Apply settings</button>
           </fieldset>
           <p id="activeRoomSettingsStatus" class="muted" role="status"></p>
           <label>New room seed <input id="roomSeed" value="period-window-a"></label>
           <label>New room run duration (s)<input id="roomRunDuration" type="number" value="120" min="20" max="120" step="5"></label>
           <div class="button-row">
             <button id="createRoomBtn">Create room</button>
-            <button id="previewClassBtn" class="button-secondary" type="button" data-help="Create a separate room with 12 demo groups and varied designs." aria-description="Create a separate room with 12 demo groups and varied designs." aria-label="Preview 12-pair class">Preview 12-pair class</button>
+            <button id="previewClassBtn" class="button-secondary" type="button" aria-description="Create a separate room with 12 demo groups and varied designs." aria-label="Preview 12-pair class">Preview 12-pair class</button>
           </div>
           <p id="previewState" class="muted" role="status"></p>
         </form>
@@ -192,10 +192,10 @@
           <h3>Earthquake controls</h3>
           <p id="phaseSteps" class="room-phase" role="status"></p>
           <div class="button-row earthquake-actions">
-            <button id="lockBtn" class="button-primary" data-help="Freeze submitted designs and room settings for the next earthquake." aria-description="Freeze submitted designs and room settings for the next earthquake." aria-label="Lock designs">Lock designs</button>
-            <button id="startBtn" class="button-secondary" data-help="Run the selected earthquake for everyone in this room." aria-description="Run the selected earthquake for everyone in this room." aria-label="Start earthquake">Start earthquake</button>
-            <button id="replayBtn" class="button-secondary" data-help="Repeat the earthquake with the saved settings and designs." aria-description="Repeat the earthquake with the saved settings and designs." aria-label="Replay earthquake">Replay earthquake</button>
-            <button id="unlockBtn" class="button-secondary" data-help="Reopen the same room for design, difficulty and earthquake-strength revisions." aria-description="Reopen the same room for design, difficulty and earthquake-strength revisions." aria-label="Unlock for revisions">Unlock for revisions</button>
+            <button id="lockBtn" class="button-primary" aria-description="Freeze submitted designs and room settings for the next earthquake." aria-label="Lock designs">Lock designs</button>
+            <button id="startBtn" class="button-secondary" aria-description="Run the selected earthquake for everyone in this room." aria-label="Start earthquake">Start earthquake</button>
+            <button id="replayBtn" class="button-secondary" aria-description="Repeat the earthquake with the saved settings and designs." aria-label="Replay earthquake">Replay earthquake</button>
+            <button id="unlockBtn" class="button-secondary" aria-description="Reopen the same room for design, difficulty and earthquake-strength revisions." aria-label="Unlock for revisions">Unlock for revisions</button>
           </div>
           </div>
           <div class="panel-heading roster-heading"><h3 class="dashboard-section-title">Group roster</h3></div>
@@ -216,8 +216,7 @@
       </div>
       <div id="quakeIntro" class="quake-intro" hidden aria-labelledby="quakeAlertTitle">
         <div class="quake-alert-sign"><h2 id="quakeAlertTitle">EARTHQUAKE ALERT!</h2></div>
-        <svg class="quake-map" viewBox="0 0 960 480" role="img" aria-labelledby="quakeMapTitle quakeMapDescription">
-          <title id="quakeMapTitle">Cartoon earthquake epicenter in Morristown, New Jersey</title>
+        <svg class="quake-map" viewBox="0 0 960 480" role="img" aria-label="Cartoon earthquake epicenter in Morristown, New Jersey" aria-describedby="quakeMapDescription">
           <desc id="quakeMapDescription">Simplified Census outlines of the eastern seaboard, including Long Island, Cape Cod, and Chesapeake Bay. New Jersey is highlighted with earthquake ripples centered on Morristown.</desc>
           <image href="/east-coast.svg?v=1" width="960" height="480"/>
           <g fill="none" stroke="#df5546" stroke-width="4" class="epicenter-ripples"><circle class="quake-ripple ripple-one" cx="364.7" cy="185.7" r="18"/><circle class="quake-ripple ripple-two" cx="364.7" cy="185.7" r="18"/><circle class="quake-ripple ripple-three" cx="364.7" cy="185.7" r="18"/></g>
@@ -240,6 +239,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-45"></script>
+  <script src="/app.js?v=classroom-46"></script>
 </body>
 </html>

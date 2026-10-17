@@ -50,7 +50,7 @@ TMD controls sit in a narrow vertical panel matching the tower identity to the l
 - A live message marks when ground shaking ends so students can measure the natural period with the TMD off.
 - After the pulse, the foundation stops and students observe free motion.
 - The building animation and graph are driven by the same numerical simulation state.
-- The graph shows roof sway relative to the foundation and supports two numbered time cursors. Edit the start and end time labels directly on its bottom axis, pressing Enter or clicking away to apply, or Escape to cancel. Both plots default to 0–120 seconds. The y-axis is labeled Building sway (m) horizontally, the danger-zone label is centered, and plot headings and cursor instructions are omitted; cursor help remains on hover. Separate Graph start/end fields and Latest/Full buttons are removed.
+- The graph shows roof sway relative to the foundation and supports two numbered time cursors. Edit the start and end time labels directly on its bottom axis, pressing Enter or clicking away to apply, or Escape to cancel. Both plots default to 0–120 seconds. The y-axis is labeled Building sway (m) horizontally, the danger-zone label is centered, and plot headings and cursor instructions are omitted; cursor help is supplied by the teacher. Separate Graph start/end fields and Latest/Full buttons are removed.
 - Difficulty modes:
   - Easy: no danger-zone collapse.
   - Medium: collapse at 3.00 s accumulated beyond the danger sway limit.
@@ -166,4 +166,6 @@ Teachers can reuse the same room across rounds. Unlock for revisions, choose dif
 
 Solo, Compare, and student design controls explicitly connect the acronym to the design choices: T - Tuning (length in meters), M - Mass (percentage of tower mass), and D - Damping. These labels add no controls or calculated tuning answers. Hydraulic heating visuals are unchanged.
 
-When Install TMD is unchecked, disable that tower's length, mass, damping number, and damping slider, retaining their values for reinstallation. Compare panels enable independently. Remove static explanations under earthquake settings; keep short live shaking/stopped feedback and essential unsaved/error messages. Brief earthquake/difficulty help appears on hover or keyboard focus and dismisses with Escape, with accessible control descriptions.
+When Install TMD is unchecked, disable that tower's length, mass, damping number, and damping slider, retaining their values for reinstallation. Compare panels enable independently. Remove static explanations under earthquake settings; keep short live shaking/stopped feedback and essential unsaved/error messages. Remove all visible hover/focus help bubbles and native title tooltips across the app; retain accessible control descriptions.
+
+Saved teacher room entries are validated against the server on page load, when returning to the browser, and when focusing the room selector. Confirmed HTTP 404 responses remove stale saved entries; temporary network, quota, and service errors retain their private keys for retry. Room updates preserve the dropdown selection, and late events from a previous room cannot replace the current room. Rooms still expire after 24 hours.

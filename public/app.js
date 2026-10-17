@@ -14,6 +14,10 @@ let currentStudent = null;
 let events = null;
 let teacherUnlocked = false;
 let creatingRoom = false;
+let openingTeacherRoom = false;
+let listedTeacherRoom = "";
+let checkingTeacherRooms = null;
+const savedRoomLoads = new Map();
 let startingQuake = false;
 let cityStart = 0;
 let lastCityStartedAt = 0;
@@ -907,7 +911,6 @@ function renderLab() {
   const dangerEnabled = sim.pulse.dangerEnabled !== false;
   const dangerToggle = $("showDangerInput");
   dangerToggle.disabled = !dangerEnabled;
-  dangerToggle.title = dangerEnabled ? "" : "Easy mode has no danger zone.";
 }
 
 function resetLab() {
@@ -949,8 +952,10 @@ async function api(path, body) {
 
 function connectRoom(code) {
   if (events) events.close();
-  events = new EventSource(`/events/${code}`);
-  events.onmessage = event => {
+  const source = new EventSource(`/events/${code}`);
+  events = source;
+  source.onmessage = event => {
+    if (events !== source) return;
     const room = JSON.parse(event.data);
     if (room.deleted) { clearDeletedRoom(room.code); return; }
     currentRoom = room;
@@ -959,13 +964,14 @@ function connectRoom(code) {
   };
 }
 
-function clearDeletedRoom(code) {
-  $("roomSettingsNotice").hidden = true;
+function clearDeletedRoom(code, reason = "deleted") {
+  const unavailable = reason === "unavailable";
   localStorage.removeItem(`tmd-teacher-${code}`);
   if (localStorage.getItem("tmd-last-teacher-room") === code) localStorage.removeItem("tmd-last-teacher-room");
   sessionStorage.removeItem(`tmd-token-${code}`);
   sessionStorage.removeItem(`tmd-nickname-${code}`);
   if (currentRoom?.code === code) {
+    $("roomSettingsNotice").hidden = true;
     events?.close();
     events = null;
     currentRoom = null;
@@ -974,8 +980,8 @@ function clearDeletedRoom(code) {
     $("activeRoomSettings").disabled = true;
     $("applyRoomSettingsBtn").disabled = true;
     $("activeRoomSettingsStatus").textContent = "Open or create a room to choose settings.";
-    $("roomState").textContent = "Room deleted. Create or open another room.";
-    $("studentState").textContent = "This room was deleted by the teacher.";
+    $("roomState").textContent = unavailable ? "Room expired or no longer available. Create or open another room." : "Room deleted. Create or open another room.";
+    $("studentState").textContent = unavailable ? "This room expired or is no longer available." : "This room was deleted by the teacher.";
     $("studentTower").textContent = "Join a room to receive a tower.";
     $("submitState").textContent = "";
     $("designEntry").hidden = false;
@@ -1075,7 +1081,7 @@ function renderRoom() {
   $("roomState").innerHTML = `<div class="room-banner"><div class="join-callout"><span>JOIN CODE</span><span class="room-code">${escapeHtml(currentRoom.code)}</span></div></div><div class="room-facts"><span>${roomMode} difficulty</span><span>Earthquake ${fmt(currentRoom.config.amplitude)} m · ${fmt(currentRoom.config.pulseDuration)} s</span><span>${currentRoom.students.length} ${currentRoom.students.length === 1 ? "group" : "groups"}${currentRoom.preview ? " · Demo class" : ""}</span></div>`;
   $("phaseSteps").textContent = `Status: ${phaseLabel}`;
   $("studentState").textContent = `Room ${currentRoom.code} / ${phaseLabel} / ${roomScenarioText(currentRoom.config)}`;
-  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" title="Remove group" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
+  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
   const wasLocked = $("submitLength").disabled;
   const locked = phase !== "design" || !currentStudent;
   ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = locked; });
@@ -1415,27 +1421,95 @@ async function createClassRoom(preview = false) {
   }
 }
 
-function renderTeacherRooms() {
-  if (typeof localStorage === "undefined") return;
+function savedTeacherRoomCodes() {
+  if (typeof localStorage === "undefined") return [];
   const codes = new Set();
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key?.startsWith("tmd-teacher-")) codes.add(key.slice("tmd-teacher-".length));
+    if (key?.startsWith("tmd-teacher-") && localStorage.getItem(key)) codes.add(key.slice("tmd-teacher-".length));
   }
-  const last = localStorage.getItem("tmd-last-teacher-room");
-  if (last) codes.add(last);
-  if (currentRoom && localStorage.getItem(`tmd-teacher-${currentRoom.code}`)) codes.add(currentRoom.code);
-  $("teacherRooms").innerHTML = '<option value="">Choose a previous room</option>' + Array.from(codes).sort().map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join("");
-  if (codes.has(currentRoom?.code)) $("teacherRooms").value = currentRoom.code;
+  return Array.from(codes).sort();
 }
 
+function renderTeacherRooms() {
+  if (typeof localStorage === "undefined") return;
+  const codes = new Set(savedTeacherRoomCodes());
+  const selected = $("teacherRooms").value;
+  const active = currentRoom?.code || "";
+  const last = localStorage.getItem("tmd-last-teacher-room");
+  $("teacherRooms").innerHTML = '<option value="">Choose a previous room</option>' + Array.from(codes).map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join("");
+  $("teacherRooms").value = active !== listedTeacherRoom && codes.has(active) ? active
+    : codes.has(selected) ? selected : codes.has(active) ? active : codes.has(last) ? last : "";
+  listedTeacherRoom = active;
+  $("teacherRooms").disabled = openingTeacherRoom;
+  $("openTeacherRoomBtn").disabled = openingTeacherRoom || !$("teacherRooms").value;
+}
+
+function loadSavedTeacherRoom(code) {
+  if (savedRoomLoads.has(code)) return savedRoomLoads.get(code);
+  const token = localStorage.getItem(`tmd-teacher-${code}`);
+  const request = (async () => {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(code)}`, { cache: "no-store" });
+    // Only a confirmed missing room removes a bookmark. Quota, network and
+    // service failures must retain its private key so the teacher can retry.
+    if (response.status === 404) {
+      if (localStorage.getItem(`tmd-teacher-${code}`) === token) clearDeletedRoom(code, "unavailable");
+      return null;
+    }
+    const room = await response.json();
+    if (!response.ok) throw new Error(room.error || "Could not open room. Please try again.");
+    return room;
+  })();
+  savedRoomLoads.set(code, request);
+  request.then(() => savedRoomLoads.delete(code), () => savedRoomLoads.delete(code));
+  return request;
+}
+
+function refreshSavedTeacherRooms() {
+  if (checkingTeacherRooms) return checkingTeacherRooms;
+  if (typeof fetch === "undefined" || typeof localStorage === "undefined") return Promise.resolve();
+  checkingTeacherRooms = Promise.allSettled(savedTeacherRoomCodes().map(loadSavedTeacherRoom)).then(() => {
+    checkingTeacherRooms = null;
+    renderTeacherRooms();
+  });
+  return checkingTeacherRooms;
+}
+
+async function restoreSavedTeacherRoom() {
+  if (typeof localStorage === "undefined" || currentRoom || openingTeacherRoom) return;
+  const code = localStorage.getItem("tmd-last-teacher-room");
+  if (!code || !localStorage.getItem(`tmd-teacher-${code}`)) return;
+  try {
+    const room = await loadSavedTeacherRoom(code);
+    if (!room) {
+      $("teacherRoomStatus").textContent = `Room ${code} expired or is no longer available and was removed from saved rooms.`;
+      return;
+    }
+    if (currentRoom || openingTeacherRoom) return;
+    currentRoom = room;
+    connectRoom(code);
+    renderRoom();
+    renderCity();
+  } catch (error) { $("teacherRoomStatus").textContent = error.message; }
+}
+
+$("teacherRooms").addEventListener("change", () => {
+  $("openTeacherRoomBtn").disabled = openingTeacherRoom || !$("teacherRooms").value;
+});
+$("teacherRooms").addEventListener("focus", () => refreshSavedTeacherRooms());
+window.addEventListener?.("focus", () => refreshSavedTeacherRooms());
 $("openTeacherRoomBtn").addEventListener("click", async () => {
   const code = $("teacherRooms").value;
-  if (!code) return;
+  if (!code || openingTeacherRoom) return;
+  openingTeacherRoom = true;
+  renderTeacherRooms();
+  $("teacherRoomStatus").textContent = "Opening room...";
   try {
-    const response = await fetch(`/api/rooms/${code}`);
-    const room = await response.json();
-    if (!response.ok) throw new Error(room.error || "Could not open room");
+    const room = await loadSavedTeacherRoom(code);
+    if (!room) {
+      $("teacherRoomStatus").textContent = `Room ${code} expired or is no longer available and was removed from saved rooms.`;
+      return;
+    }
     currentRoom = room;
     currentStudent = null;
     localStorage.setItem("tmd-last-teacher-room", code);
@@ -1444,6 +1518,10 @@ $("openTeacherRoomBtn").addEventListener("click", async () => {
     renderCity();
     $("teacherRoomStatus").textContent = "";
   } catch (error) { $("teacherRoomStatus").textContent = error.message; }
+  finally {
+    openingTeacherRoom = false;
+    renderTeacherRooms();
+  }
 });
 
 $("roomForm").addEventListener("submit", async event => {
@@ -1690,19 +1768,12 @@ resetLab();
 requestAnimationFrame(animateLab);
 animateCity();
 
-// Restore the teacher's last room after a refresh; the private key stays on this browser.
+// Validate saved bookmarks on load, and again when the teacher returns.
+// Shared in-flight lookups avoid fetching the last room twice during startup.
 renderTeacherRooms();
-if (typeof localStorage !== "undefined") {
-  const savedCode = localStorage.getItem("tmd-last-teacher-room");
-  if (savedCode && localStorage.getItem(`tmd-teacher-${savedCode}`)) {
-    fetch(`/api/rooms/${savedCode}`).then(res => res.ok ? res.json() : null).then(room => {
-      if (!room || currentRoom) return;
-      currentRoom = room;
-      connectRoom(room.code);
-      renderRoom();
-      renderCity();
-    }).catch(() => {});
-  }
+if (typeof fetch !== "undefined" && typeof localStorage !== "undefined") {
+  restoreSavedTeacherRoom();
+  refreshSavedTeacherRooms();
 }
 
 $("teacherLoginForm").addEventListener("submit", async event => {
@@ -1732,13 +1803,3 @@ if (typeof fetch !== "undefined") {
     renderRoom();
   }).catch(() => {});
 }
-
-// Help is available on hover or keyboard focus, and Escape dismisses it.
-document.querySelectorAll("[data-help]").forEach(control => {
-  control.addEventListener("keydown", event => {
-    if (event.key === "Escape") control.dataset.helpDismissed = "true";
-  });
-  for (const event of ["pointerenter", "pointerleave", "focusin", "focusout"]) {
-    control.addEventListener(event, () => { delete control.dataset.helpDismissed; });
-  }
-});

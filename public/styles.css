@@ -767,32 +767,3 @@ th { color: #425160; }
 .tmd-controls .field-row:has(input:disabled) { opacity: .5; }
 .tmd-controls input:disabled { cursor: not-allowed; background: #edf1f3; }
 #activeRoomSettingsStatus:empty { display: none; }
-[data-help] { position: relative; }
-[data-help]::after {
-  content: attr(data-help);
-  display: none;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 100;
-  width: 230px;
-  max-width: 75vw;
-  padding: 9px 11px;
-  border: 1px solid #435a68;
-  border-radius: 6px;
-  background: #20343f;
-  color: #fff;
-  box-shadow: 0 5px 14px rgba(20, 33, 42, .18);
-  font: 500 12px/1.4 system-ui, sans-serif;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: normal;
-  white-space: normal;
-}
-[data-help]:not([data-help-dismissed]):is(:hover, :focus-visible, :focus-within)::after { display: block; }
-.strength-buttons [data-help]:last-child::after,
-.mode-row [data-help]:last-child::after,
-.run-row [data-help]:last-child::after { left: auto; right: 0; }
-.strength-buttons [data-help]:nth-child(2)::after,
-.mode-row [data-help]:nth-child(2)::after,
-.run-row [data-help]:nth-child(2)::after { left: 50%; transform: translateX(-50%); }
