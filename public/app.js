@@ -164,8 +164,8 @@ function damperFromLab(comparison = false) {
     ["damperEnabled", "lengthInput", "massInput", "dampingInput"];
   return P.clampDamper({
     enabled: $(ids[0]).checked,
-    length: inputNumber(ids[1], 8.4),
-    massRatio: inputNumber(ids[2], 3.5) / 100,
+    length: inputNumber(ids[1], 0.7),
+    massRatio: inputNumber(ids[2], 1) / 100,
     damping: inputNumber(ids[3], 0),
     wallLimit: 2.7,
     restitution: 0.28,
@@ -1074,6 +1074,10 @@ function enteredDesign() {
   return { enabled: true, length: Number($("submitLength").value), massRatio: Number($("submitMass").value) / 100, damping: Number($("submitDamping").value), wallLimit: 2.7 };
 }
 
+function submittedDesignMessage(design) {
+  return `Design submitted! Length: ${fmt(design.length)} m; mass: ${fmt(design.massRatio * 100)}%; damping: ${fmt(design.damping)}.`;
+}
+
 function submissionFeedback(text, kind = "info", reveal = false) {
   submissionFeedbackKey = studentContextKey();
   const status = $("submitState");
@@ -1092,7 +1096,7 @@ function renderSubmissionFeedback() {
   if (["error", "warning"].includes($("submitState").dataset.kind)) return;
   if (currentStudent?.submission?.enabled) {
     const edited = !locked && (!["submitLength", "submitMass", "submitDamping"].every(id => String($(id).value).trim() !== "") || !matchingDesign(enteredDesign(), currentStudent.submission));
-    submissionFeedback(edited ? "Changes not submitted. Click Submit changes to save them." : "Design submitted! TMD saved for the next earthquake.", edited ? "warning" : "success");
+    submissionFeedback(edited ? "Changes not submitted. Click Submit changes to save them." : submittedDesignMessage(currentStudent.submission), edited ? "warning" : "success");
   }
 }
 
@@ -1106,8 +1110,8 @@ function activateTeacherRoom(room) {
   currentRoom = room;
   currentStudent = token ? room.students.find(student => student.id === id) || null : null;
   if (currentStudent && (previousCode !== room.code || !previousStudent)) {
-    $("submitLength").value = currentStudent.submission ? fmt(currentStudent.submission.length) : "0";
-    $("submitMass").value = currentStudent.submission ? fmt(currentStudent.submission.massRatio * 100, 1) : "0";
+    $("submitLength").value = currentStudent.submission ? fmt(currentStudent.submission.length) : "0.7";
+    $("submitMass").value = currentStudent.submission ? fmt(currentStudent.submission.massRatio * 100) : "1";
     $("submitDamping").value = currentStudent.submission ? fmt(currentStudent.submission.damping) : "0";
   }
 }
@@ -1137,7 +1141,7 @@ function renderRoom() {
   $("phaseSteps").textContent = `Status: ${phaseLabel}`;
   $("studentState").textContent = "";
   $("studentState").hidden = true;
-  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
+  $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
   const locked = phase !== "design" || !currentStudent;
   ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = locked || !!submittingDesign; });
   if (!currentStudent) { renderSubmissionFeedback(); return showJoined(false); }
@@ -1162,13 +1166,13 @@ function renderRoom() {
   }
   $("designEntry").hidden = locked;
   if (locked) {
-    $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "0";
-    $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100, 1) : "0";
+    $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "0.7";
+    $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100) : "1";
     $("submitDamping").value = latest.submission ? fmt(latest.submission.damping) : "0";
   }
   renderSubmissionFeedback();
   const lockBanner = !locked ? "" : `<div class="lock-banner" role="status"><span aria-hidden="true">🔒</span> ${phase === "running" ? "Earthquake underway — watch the board!" : "Designs locked — watch the board."}${latest.submission ? "" : " No design was submitted, so your tower is tested without a TMD."}</div>`;
-  $("studentTower").innerHTML = `${lockBanner}<p class="round-settings">Current round: ${roomScenarioText(currentRoom.config)}</p><div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your tower from collapsing during an earthquake.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
+  $("studentTower").innerHTML = `${lockBanner}<p class="round-settings">Current round: ${roomScenarioText(currentRoom.config)}</p><div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your tower from collapsing during an earthquake.</p>`;
   $("joinedSummary").innerHTML = `<strong>${escapeHtml(latest.nickname)}</strong> · Room ${escapeHtml(currentRoom.code)} · ${escapeHtml(phaseLabel)}`;
   if (!joinEditing) showJoined(true);
 }
@@ -1367,10 +1371,10 @@ document.querySelectorAll('input[name="difficultyMode"]').forEach(input => {
 });
 [
   ["lengthInput", 2],
-  ["massInput", 1],
+  ["massInput", 2],
   ["dampingInput", 2],
   ["compareLengthInput", 2],
-  ["compareMassInput", 1],
+  ["compareMassInput", 2],
   ["compareDampingInput", 2]
 ].forEach(([id, digits]) => {
   $(id).addEventListener("change", () => {
@@ -1608,9 +1612,9 @@ $("joinForm").addEventListener("submit", async event => {
     submissionFeedbackKey = "";
     currentStudent = data.student;
     joinEditing = false;
-    // New assignments start at zero; reconnecting restores only the pair's own submission.
-    $("submitLength").value = data.student.submission ? fmt(data.student.submission.length) : "0";
-    $("submitMass").value = data.student.submission ? fmt(data.student.submission.massRatio * 100, 1) : "0";
+    // New assignments start at minimum settings; reconnecting restores the pair's own submission.
+    $("submitLength").value = data.student.submission ? fmt(data.student.submission.length) : "0.7";
+    $("submitMass").value = data.student.submission ? fmt(data.student.submission.massRatio * 100) : "1";
     $("submitDamping").value = data.student.submission ? fmt(data.student.submission.damping) : "0";
     currentRoom = data.room;
     connectRoom(code);
@@ -1671,7 +1675,7 @@ $("submitForm").addEventListener("submit", async event => {
       const latest = currentRoom.students.find(student => student.id === request.studentId);
       if (latest) latest.submission = data.student.submission;
       currentStudent = latest || data.student;
-      submissionFeedback("Design submitted! TMD saved for the next earthquake.", "success", true);
+      submissionFeedback(submittedDesignMessage(data.student.submission), "success", true);
     }
   } catch (error) {
     if (studentContextKey() === request.key) submissionFeedback(`Design was not submitted: ${error.message}`, "error", true);
@@ -1799,6 +1803,13 @@ $("quakeSoundBtn").addEventListener("click", () => {
   }
 });
 
+function resetSoloDefaults() {
+  // A fresh page always starts with a bare tower, including restored forms.
+  $("damperEnabled").checked = false;
+  for (const id of ["lengthInput", "massInput", "dampingInput"]) $(id).value = $(id).defaultValue;
+  updateLabels();
+}
+
 function resetDifficultyDefaults() {
   // Browsers can restore old radio selections despite the HTML checked attribute.
   for (const name of ["difficultyMode"]) {
@@ -1811,9 +1822,11 @@ function resetDifficultyDefaults() {
     $("activeRoomStrength").value = "moderate";
   }
 }
+resetSoloDefaults();
 resetDifficultyDefaults();
 window.addEventListener?.("pageshow", event => {
   if (!event.persisted) {
+    resetSoloDefaults();
     resetDifficultyDefaults();
     resetLab();
   }

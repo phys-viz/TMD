@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-41">
+  <link rel="stylesheet" href="/styles.css?v=classroom-42">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -69,9 +69,9 @@
                   <h3 id="compareTmdHeading">Tower A</h3>
                   <label class="check"><input id="compareDamperEnabled" type="checkbox" aria-label="Install Tower A TMD"> TMD</label>
                   <div class="field-row three">
-                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4"></label>
-                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5"></label>
-                    <div class="damping-field"><label for="compareDampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower A damping"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0"></div></div>
+                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="0.7"></label>
+                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="compareMassInput" type="number" min="1" max="10" step="0.05" value="1"></label>
+                    <div class="damping-field"><label for="compareDampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.05" value="0" aria-label="Tower A damping"><input id="compareDampingInput" type="number" min="0" max="1" step="0.05" value="0"></div></div>
                   </div>
                 </div>
               </div>
@@ -92,11 +92,11 @@
               <div class="control-block tmd-controls" role="group" aria-labelledby="tmdHeading">
                 <div class="tmd-settings-row">
                   <h3 id="tmdHeading">Tower</h3>
-                  <label class="check"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD" checked> TMD</label>
+                  <label class="check"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD"> TMD</label>
                   <div class="field-row three">
-                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4"></label>
-                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5"></label>
-                    <div class="damping-field"><label for="dampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower damping"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0"></div></div>
+                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="0.7"></label>
+                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="massInput" type="number" min="1" max="10" step="0.05" value="1"></label>
+                    <div class="damping-field"><label for="dampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.05" value="0" aria-label="Tower damping"><input id="dampingInput" type="number" min="0" max="1" step="0.05" value="0"></div></div>
                   </div>
                 </div>
               </div>
@@ -139,9 +139,9 @@
           <p id="submitState" class="submission-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></p>
           <div id="designEntry">
           <div class="design-fields">
-          <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="submitLength" value="0" required type="number" min="0" max="17.7" step="0.05"></label>
-          <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="submitMass" value="0" required type="number" min="0" max="10" step="0.1"></label>
-          <label><span class="tmd-variable"><strong>D</strong> Damping</span><input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
+          <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="submitLength" value="0.7" required type="number" min="0.7" max="17.7" step="0.05"></label>
+          <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="submitMass" value="1" required type="number" min="1" max="10" step="0.05"></label>
+          <label><span class="tmd-variable"><strong>D</strong> Damping</span><input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.05"></label>
           </div>
           <button id="submitDesignBtn" type="submit">Submit design</button>
           </div>
@@ -237,6 +237,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-49"></script>
+  <script src="/app.js?v=classroom-50"></script>
 </body>
 </html>

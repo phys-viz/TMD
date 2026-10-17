@@ -620,8 +620,6 @@ th { color: #425160; }
 .tower-facts span { font-size: .92rem; color: #516777; }
 .tower-facts strong { font-size: 1.4rem; color: #203c49; }
 #studentTower p { color: #445e6e; }
-.submission-summary { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #c4d6e2; }
-.submission-summary > strong { flex-basis: 100%; color: #286248; }
 .design-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 24px; margin: 8px 0; }
 #student .design-fields label { width: 165px; }
 #submitDesignBtn { min-width: 220px; }
