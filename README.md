@@ -26,7 +26,7 @@ Joined students switch to City automatically when the teacher starts or replays 
 
 Start opens the teacher's alert immediately and announces the quake to students before calculating scores. The server prepares the skyline during the shared ten-second countdown. If preparation runs longer, the map holds with “Preparing city…”; completed results receive a shared two-second lead-in when needed. The hosted backend uses a one-time persistent alarm for this work, then returns to its normal expiration alarm, preserving idle-room hibernation. Replay uses the same sequence.
 
-Each leaderboard displays its own metric: settling time (s), danger time (s), TMD mass (% of tower mass), or damping. Easy uses peak sway (m) instead of danger time. Collapsed towers retain those metrics with a separate “Collapsed” status; bare towers show “No TMD” on mass/damping boards. Only surviving eligible designs receive medals; failed towers remain at the bottom, ordered by survival time.
+Only surviving eligible towers receive ranks and medals. Each board lists collapsed towers in a separate unranked group, latest collapse first, with collapse time shown to hundredths of a second. Collapsed towers retain danger time (peak sway on Easy), TMD mass, and damping, but show Collapsed instead of a settling time. Bare surviving towers remain unranked on mass/damping boards and show No TMD. Boards without eligible survivors say No qualifying designs this round. The detailed results table follows the same collapse ordering and omits collapsed ranks and settling times.
 
 ## Test
 

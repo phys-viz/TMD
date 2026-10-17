@@ -691,7 +691,9 @@ th { color: #425160; }
 .leaderboard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fbfcfd; }
 .leaderboard h3 { font-size: 1rem; text-transform: none; letter-spacing: 0; color: #203c49; }
 .leaderboard > p { margin: 2px 0 8px; font-size: .82rem; }
-.leaderboard ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.leaderboard ol, .leaderboard ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.leaderboard .board-group-label { margin: 12px 0 4px; padding-top: 8px; border-top: 1px solid var(--line); font-size: .8rem; color: #53636e; }
+.leaderboard .board-empty { font-weight: 650; color: #53636e; }
 .leaderboard li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: .95rem; }
 .leaderboard li.podium { background: #fff6dd; font-weight: 700; }
 .board-status { display: block; font-size: .75rem; font-weight: 400; }

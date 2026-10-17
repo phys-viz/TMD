@@ -1300,7 +1300,15 @@ function renderCity() {
   });
 
   renderLeaderboards(currentRoom.results || [], pulse);
-  $("resultsTable").querySelector("tbody").innerHTML = (currentRoom.results || []).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.nickname)}</td><td>${r.result.status}</td><td>${fmt(r.result.settleTime, 2)} s</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>${r.submission?.enabled ? `L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}` : "No TMD"}</td></tr>`).join("");
+  renderResultsTable(currentRoom.results || []);
+}
+
+function collapseLabel(result) {
+  return Number.isFinite(result.failureTime) ? `Collapsed at ${fmt(result.failureTime)} s` : "Collapsed";
+}
+
+function renderResultsTable(results) {
+  $("resultsTable").querySelector("tbody").innerHTML = leaderboard(results, r => r.result.settleTime).map(({ r, place, kind }) => `<tr><td>${place ?? "&mdash;"}</td><td>${escapeHtml(r.nickname)}</td><td>${kind === "failed" ? collapseLabel(r.result) : "Standing"}</td><td>${kind === "failed" ? "&mdash;" : `${fmt(r.result.settleTime)} s`}</td><td>${fmt(r.result.peakSway)} m</td><td>${r.result.hits}</td><td>${fmt(r.result.heat / 1000, 1)} kJ</td><td>${r.submission?.enabled ? `L ${fmt(r.submission.length)} m, D ${fmt(r.submission.damping)}` : "No TMD"}</td></tr>`).join("");
 }
 
 // Each board ranks surviving towers by one measure; collapsed towers follow, longest-lasting first.
@@ -1315,8 +1323,8 @@ function leaderboard(results, value, { needsTmd = false } = {}) {
     const place = i > 0 && value(r) === value(ranked[i - 1]) ? rows[i - 1].place : i + 1;
     rows.push({ r, place, kind: "ranked" });
   });
-  for (const r of noTmd) rows.push({ r, place: rows.length + 1, kind: "no-tmd" });
-  for (const r of failed) rows.push({ r, place: rows.length + 1, kind: "failed" });
+  for (const r of noTmd) rows.push({ r, place: null, kind: "no-tmd" });
+  for (const r of failed) rows.push({ r, place: null, kind: "failed" });
   return rows;
 }
 
@@ -1333,7 +1341,7 @@ function renderLeaderboards(results, pulse) {
   // Values are rounded to what is displayed so visible ties share a place.
   const round = (v, digits) => Number(v.toFixed(digits));
   const boards = [
-    { title: "Fastest to settle", note: "Sway within 10% of its own peak", value: r => round(r.result.relativeSettleTime ?? r.result.settleTime, 2), show: v => `${fmt(v, 2)} s` },
+    { title: "Fastest to settle", note: "Must survive; sway within 10% of its own peak", settling: true, value: r => round(r.result.relativeSettleTime ?? r.result.settleTime, 2), show: v => `${fmt(v, 2)} s` },
     dangerOn
       ? { title: "Least time in danger zone", note: "Must survive", value: r => round(r.result.overLimitTime || 0, 2), show: v => `${fmt(v, 2)} s` }
       : { title: "Least peak sway", note: "No danger zone on Easy", value: r => round(r.result.peakSway, 2), show: v => `${fmt(v, 2)} m` },
@@ -1341,11 +1349,18 @@ function renderLeaderboards(results, pulse) {
     { title: "Least damping", note: "Must survive", value: r => round(r.submission.damping, 2), show: v => fmt(v, 2), needsTmd: true }
   ];
   const medals = ["🥇", "🥈", "🥉"];
-  $("leaderboards").innerHTML = boards.map(board => `<section class="leaderboard"><h3>${board.title}</h3><p>${board.note}</p><ol>${leaderboard(results, board.value, board).map(({ r, place, kind }) => {
-    const label = board.needsTmd && !r.submission?.enabled ? "No TMD" : board.show(board.value(r));
-    const mark = kind === "ranked" && place <= 3 ? medals[place - 1] : place;
-    return `<li class="board-${kind}${kind === "ranked" && place <= 3 ? " podium" : ""}"><span class="board-place">${mark}</span><span class="board-name">${escapeHtml(r.nickname)}${kind === "failed" ? '<small class="board-status">Collapsed</small>' : ""}</span><span class="board-value">${label}</span></li>`;
-  }).join("")}</ol></section>`).join("");
+  $("leaderboards").innerHTML = boards.map(board => {
+    const rows = leaderboard(results, board.value, board);
+    const group = kind => rows.filter(row => row.kind === kind);
+    const renderRows = entries => entries.map(({ r, place, kind }) => {
+      const label = kind === "failed" && board.settling ? "Collapsed"
+        : board.needsTmd && !r.submission?.enabled ? "No TMD" : board.show(board.value(r));
+      const mark = kind === "ranked" ? place <= 3 ? medals[place - 1] : place : "&mdash;";
+      return `<li class="board-${kind}${kind === "ranked" && place <= 3 ? " podium" : ""}"><span class="board-place">${mark}</span><span class="board-name">${escapeHtml(r.nickname)}${kind === "failed" ? `<small class="board-status">${collapseLabel(r.result)}</small>` : ""}</span><span class="board-value">${label}</span></li>`;
+    }).join("");
+    const ranked = group("ranked"), noTmd = group("no-tmd"), failed = group("failed");
+    return `<section class="leaderboard"><h3>${board.title}</h3><p>${board.note}</p>${ranked.length ? `<ol>${renderRows(ranked)}</ol>` : '<p class="board-empty">No qualifying designs this round.</p>'}${noTmd.length ? `<h4 class="board-group-label">Survived without a TMD</h4><ul>${renderRows(noTmd)}</ul>` : ""}${failed.length ? `<h4 class="board-group-label">Collapsed (latest first)</h4><ul>${renderRows(failed)}</ul>` : ""}</section>`;
+  }).join("");
 }
 
 function animateCity() {

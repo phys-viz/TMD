@@ -990,19 +990,34 @@ for (const damping of [0, .25, 1]) {
   const boardResults = [entry("Late fall", "failed", 0.1, { failureTime: 40 }), entry("Bare", "standing", null), entry("B", "standing", 0.2), entry("Early fall", "failed", 0, { failureTime: 5 }), entry("A", "standing", 0.2), entry("C", "standing", 0.5)];
   const board = vm.runInContext("leaderboard", app)(boardResults, r => r.submission.damping, { needsTmd: true });
   assert.deepEqual(Array.from(board, row => row.r.nickname), ["B", "A", "C", "Bare", "Late fall", "Early fall"], "survivors rank by value, then no-TMD survivors, then failures by how long they lasted");
-  assert.deepEqual(Array.from(board, row => row.place), [1, 1, 3, 4, 5, 6], "tied values share a place");
+  assert.deepEqual(Array.from(board, row => row.place), [1, 1, 3, null, null, null], "only eligible survivors receive places, with ties preserved");
   assert.equal(board.find(row => row.r.nickname === "Early fall").kind, "failed", "the lowest damping cannot win if the tower collapsed");
   vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: true });
   assert(dom.survivorBanner.innerHTML.includes("4 of 6 towers survived") && dom.survivorBanner.innerHTML.includes("Late fall"), "banner counts survivors and names collapses");
   const boards = dom.leaderboards.innerHTML.split('<section class="leaderboard">').slice(1);
   const fallenRow = board => board.match(/<li class="board-failed">.*?Late fall.*?<\/li>/)[0];
   assert(boards[1].includes("Least time in danger zone"));
-  for (const [index, metric] of [[0, '10.00 s'], [1, '0.00 s'], [2, '4.0%'], [3, '0.10']]) {
+  for (const [index, metric] of [[0, 'Collapsed'], [1, '0.00 s'], [2, '4.0%'], [3, '0.10']]) {
     const row = fallenRow(boards[index]);
-    assert(row.includes(`class="board-value">${metric}</span>`), "collapsed rows retain each leaderboard's own metric");
-    assert(row.includes('class="board-status">Collapsed</small>'), "collapsed status stays separate from the metric");
+    assert(row.includes(`class="board-value">${metric}</span>`), "collapsed rows retain useful metrics but cannot claim to have settled");
+    assert(row.includes('class="board-status">Collapsed at 40.00 s</small>'), "collapse time stays separate from the metric");
   }
-  assert(!dom.leaderboards.innerHTML.includes('Collapsed at'), "survival time cannot replace the metric on other boards");
+  assert(boards.every(board => board.includes('Collapsed (latest first)')), "collapsed towers have a separate unranked group");
+  for (const board of boards) {
+    const failedRows = [...board.matchAll(/<li class="board-failed">.*?<\/li>/g)].map(match => match[0]);
+    assert(failedRows[0].includes('Late fall') && failedRows[1].includes('Early fall'), "each collapsed group orders latest collapse first");
+    assert(failedRows.every(row => row.includes('class="board-place">&mdash;</span>')), "collapsed towers never display rank numbers or medals");
+  }
+  const allFailed = boardResults.filter(row => row.result.status === 'failed');
+  vm.runInContext("renderLeaderboards", app)(allFailed, { dangerEnabled: true });
+  assert.equal((dom.leaderboards.innerHTML.match(/No qualifying designs this round\./g) || []).length, 4, "all-collapsed rounds clearly have no qualifying designs on every board");
+  assert(!dom.leaderboards.innerHTML.includes('<ol>') && !dom.leaderboards.innerHTML.includes('podium'), "all-collapsed rounds award no ranks or medals");
+  const resultsBody = { innerHTML: '' };
+  dom.resultsTable.querySelector = () => resultsBody;
+  vm.runInContext("renderResultsTable", app)(boardResults);
+  const resultRows = resultsBody.innerHTML;
+  assert(resultRows.includes('<td>&mdash;</td><td>Late fall</td><td>Collapsed at 40.00 s</td><td>&mdash;</td>'), "detailed results also omit rank and settling time for a collapsed tower");
+  assert(resultRows.indexOf('Late fall') < resultRows.indexOf('Early fall'), "detailed results order collapsed towers by survival time");
   vm.runInContext("renderLeaderboards", app)([entry("Bare fall", "failed", null, { failureTime: 2 })], { dangerEnabled: true });
   assert.equal((dom.leaderboards.innerHTML.match(/class="board-value">No TMD/g) || []).length, 2, "failed bare towers have no invented mass or damping");
   vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: false });
