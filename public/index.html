@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-36">
+  <link rel="stylesheet" href="/styles.css?v=classroom-37">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -69,9 +69,9 @@
                   <h3 id="compareTmdHeading">Tower A</h3>
                   <label class="check" title="Install TMD"><input id="compareDamperEnabled" type="checkbox" aria-label="Install Tower A TMD"> TMD</label>
                   <div class="field-row three">
-                    <label>Length (m)<input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
-                    <label>Mass (%)<input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <div class="damping-field"><label for="compareDampingInput">Damping</label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower A damping" title="0: free; resistance rises toward 1: locked"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
+                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="compareLengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
+                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="compareMassInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
+                    <div class="damping-field"><label for="compareDampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="compareDampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower A damping" title="0: free; resistance rises toward 1: locked"><input id="compareDampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
                   </div>
                 </div>
               </div>
@@ -94,9 +94,9 @@
                   <h3 id="tmdHeading">Tower</h3>
                   <label class="check" title="Install TMD"><input id="damperEnabled" type="checkbox" aria-label="Install tower TMD" checked> TMD</label>
                   <div class="field-row three">
-                    <label>Length (m)<input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
-                    <label>Mass (%)<input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
-                    <div class="damping-field"><label for="dampingInput">Damping</label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower damping" title="0: free; resistance rises toward 1: locked"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
+                    <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="lengthInput" type="number" min="0.7" max="17.7" step="0.05" value="8.4" title="Length: 0.7–17.7 m"></label>
+                    <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="massInput" type="number" min="1" max="10" step="0.5" value="3.5" title="Mass: 1–10% of tower mass"></label>
+                    <div class="damping-field"><label for="dampingInput"><span class="tmd-variable"><strong>D</strong> Damping</span></label><div class="damping-control"><input id="dampingSlider" type="range" min="0" max="1" step="0.01" value="0" aria-label="Tower damping" title="0: free; resistance rises toward 1: locked"><input id="dampingInput" type="number" min="0" max="1" step="0.01" value="0" title="0: no damping; only 1.00 locks the pendulum"></div></div>
                   </div>
                 </div>
               </div>
@@ -139,9 +139,9 @@
           <div id="studentTower" class="readout">Join a room to receive a tower.</div>
           <div id="designEntry">
           <div class="design-fields">
-          <label>Pendulum length (m)<input id="submitLength" required type="number" min="0.7" max="17.7" step="0.05"></label>
-          <label>TMD mass (%)<input id="submitMass" required type="number" min="1" max="10" step="any"></label>
-          <label>Damping<input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
+          <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="submitLength" required type="number" min="0.7" max="17.7" step="0.05"></label>
+          <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="submitMass" required type="number" min="1" max="10" step="any"></label>
+          <label><span class="tmd-variable"><strong>D</strong> Damping</span><input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
           </div>
           <button id="submitDesignBtn">Submit / revise before lock</button>
           </div>

@@ -757,3 +757,9 @@ th { color: #425160; }
 .compare-mode #primaryTower .tmd-controls { --section-accent: #245e9b; --section-border: #245e9b; --section-bg: #e1efff; }
 #teacher #roomForm .active-room-settings { margin-top: 16px; }
 #teacher #roomForm #activeRoomSettingsStatus { margin-block: 10px; }
+
+/* Reinforce the three TMD design choices without adding controls. */
+.tmd-variable { display: flex; align-items: baseline; gap: 4px; }
+.tmd-variable strong { color: var(--section-accent, #245e9b); font-size: 1.15em; font-weight: 850; }
+.tmd-unit { font-size: .9em; font-weight: 650; }
+.stage-wrap .tmd-controls .field-row label { white-space: normal; }
