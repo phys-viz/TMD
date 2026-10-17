@@ -238,7 +238,7 @@ export class ChallengeRoom extends DurableObject {
         if (!student) return json({ error: 'Student token not found' }, 404);
         const error = submissionError(body.submission);
         if (error) return json({ error }, 400);
-        student.submission = physics.clampDamper({ wallLimit: 2.7, ...body.submission });
+        student.submission = physics.clampDamper(body.submission);
         await this.save();
         return json({ student, room: publicRoom(room) });
       }

@@ -106,7 +106,7 @@ const app = vm.createContext({
 function contactAngle(tower, damper, side = 1, sway = 0) {
   const P = require("../public/physics.js");
   let low = 0, high = 0;
-  for (let angle = 0.001; angle < Math.PI / (2 * P.pendulumAngleScale); angle += 0.001) {
+  for (let angle = 0.001; angle < Math.PI / 2; angle += 0.001) {
     if (P.pendulumContact(tower, damper, side * angle, sway).clearance <= 0) { high = angle; break; }
     low = angle;
   }
@@ -419,7 +419,8 @@ for (const fraction of [0.8, 0.9, 0.99]) {
   const bob = dom.stage.ctx.drawings.find(d => d.method === "arc" && Math.abs(d.args[2] - travel.bobRadiusPx) < 1e-9);
   assert(bob, "the live bob remains visible before contact");
   const offset = bob.args[0] - dom.stage.width / 2;
-  assert(Math.abs(offset - Math.sin(angle * app.window.TMDPhysics.pendulumAngleScale) * travel.lengthPx) < 1e-9, "displayed displacement follows the actual pendulum angle");
+  assert(Math.abs(offset - app.window.TMDPhysics.pendulumPose(travel, angle, state().damper.length).x) < 1e-9, "displayed displacement follows the actual pendulum angle");
+  assert(Math.abs(offset - travel.pxPerMeter * state().damper.length * Math.sin(angle)) < 1e-9, "drawn offset is the true bob offset at the cutaway scale");
   offsets.push(offset);
 }
 assert(offsets[0] < offsets[1] && offsets[1] < offsets[2], "bob keeps moving as it approaches the displayed contact limit");
@@ -450,9 +451,9 @@ for (const damping of [0, 0.1]) for (const side of [-1, 1]) {
   const g = P.pendulumGeometry(state().tower, state().damper, sample.sway);
   const bob = dom.stage.ctx.drawings.find(d => d.method === "arc" && d.args[2] === g.bobRadiusPx);
   assert(bob, "failed tower briefly retains its bob at the impact pose");
-  const pivotX = dom.stage.width / 2 + (sample.y + sample.sway) * 132;
-  const contact = state().state.contact;
-  assert(Math.abs(Math.hypot(bob.args[0] - pivotX - contact.x, bob.args[1] - contact.y) - g.bobRadiusPx) < 0.000001, "impact marker lies exactly on the bob's touching surface");
+  const marker = dom.stage.ctx.drawings.find(d => d.method === "fillText" && d.args[0] === "IMPACT");
+  assert(Math.abs(Math.hypot(bob.args[0] - marker.args[1], bob.args[1] - (marker.args[2] + 19)) - g.bobRadiusPx) < 0.000001, "impact marker lies exactly on the bob's touching surface");
+  assert.strictEqual(state().state.contact.kind, damping > 0 ? "housing" : "wall", "the recorded contact names the touched surface");
   assert(dom.stage.ctx.drawings.some(d => d.method === "fillText" && d.args[0] === "IMPACT"), "the contact is visibly marked before collapse");
   vm.runInContext("sim.collapseAge = 0.46", app);
   dom.stage.ctx.drawings.length = 0;

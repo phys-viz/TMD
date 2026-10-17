@@ -15,7 +15,7 @@ const tower = {
   dampingRatio: 0.03
 };
 
-const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2 };
+const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45 };
 
 {
   const L = P.g * Math.pow(6 / (2 * Math.PI), 2);
@@ -37,8 +37,13 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
 
 {
   const d = P.defaultDamperFor(tower);
-  const expectedCoeff = P.hydraulicDamperCount * d.damping * 2 * tower.mass * d.massRatio * Math.sqrt(P.g * d.length);
+  const critical = L => 2 * tower.mass * d.massRatio * L * Math.sqrt(P.g * L);
+  const expectedCoeff = P.hydraulicDamperCount * P.hydraulicRatio * d.damping * critical(d.length);
   close(P.damperCoeff(tower, d), expectedCoeff, 1e-6, "two hydraulic dampers act in parallel");
+  // b is a rotational coefficient (N·m·s), so one setting gives the same damping ratio at every length.
+  for (const length of [0.7, 5, 12, 17.7]) {
+    close(P.damperCoeff(tower, { ...d, length }) / critical(length), P.hydraulicDamperCount * P.hydraulicRatio * d.damping, 1e-12, "damping ratio is independent of pendulum length");
+  }
   let state = P.initialState();
   let heat = 0;
   for (let i = 0; i < 3000; i++) {
@@ -69,7 +74,7 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
 
 {
   const ordinary = P.evaluateDesign(tower, P.defaultDamperFor(tower), pulse);
-  const easySevere = P.evaluateDesign(tower, { enabled: false }, { ...pulse, amplitude: 3, driftLimit: 99, dangerEnabled: false, collapseSway: 0.5, collapseTime: 0.2 });
+  const easySevere = P.evaluateDesign(tower, { enabled: false }, { ...pulse, amplitude: 3, dangerEnabled: false, collapseSway: 0.5, collapseTime: 0.2 });
   const duringPulse = P.simulate({ tower, damper: { enabled: false }, pulse: { ...pulse, amplitude: 3, duration: 4, collapseSway: 0, collapseTime: 0.1 }, duration: 2 });
   const visibleOutside = P.simulate({ tower, damper: { enabled: false }, pulse: { ...pulse, amplitude: 0, duration: 0.01, collapseSway: 0.1 }, initialX: 0.3, duration: 0.3, sampleDt: 0.01 });
   const fastInside = P.simulate({ tower, damper: { enabled: false }, pulse: { ...pulse, amplitude: 0, duration: 0.005, collapseSway: 0.2 }, initialX: 0, initialV: 5, duration: 0.006, sampleDt: 0.01 });
@@ -225,7 +230,7 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45, driftLimit: 1.2
 
 function contactAngle(tower, damper, side, sway = 0) {
   let low = 0, high = 0;
-  for (let angle = 0.001; angle < Math.PI / (2 * P.pendulumAngleScale); angle += 0.001) {
+  for (let angle = 0.001; angle < Math.PI / 2; angle += 0.001) {
     if (P.pendulumContact(tower, damper, side * angle, sway).clearance <= 0) { high = angle; break; }
     low = angle;
   }

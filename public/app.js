@@ -152,7 +152,6 @@ function pulseFromLab() {
     amplitude: selectedEarthquakeAmplitude("earthquakeStrength"),
     duration: EARTHQUAKE_DURATION,
     difficulty: difficulty.mode,
-    driftLimit: 1.2,
     dangerEnabled: difficulty.dangerEnabled,
     collapseSway: labTower.dangerSwayLimit ?? difficulty.collapseSway,
     collapseTime: difficulty.collapseTime,
@@ -167,10 +166,7 @@ function damperFromLab(comparison = false) {
     enabled: $(ids[0]).checked,
     length: inputNumber(ids[1], 0.7),
     massRatio: inputNumber(ids[2], 1) / 100,
-    damping: inputNumber(ids[3], 0),
-    wallLimit: 2.7,
-    restitution: 0.28,
-    bobRadius: 0.3
+    damping: inputNumber(ids[3], 0)
   });
 }
 
@@ -663,18 +659,16 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     const shearOffset = -geometry.mountSlope * (geometry.anchorY - top);
     geometry.leftAnchorOffset = -towerWidth / 2 + shearOffset;
     geometry.rightAnchorOffset = towerWidth / 2 + shearOffset;
-    const Lpx = geometry.lengthPx;
     const bobR = geometry.bobRadiusPx;
-    const drawTheta = sample.theta * P.pendulumAngleScale;
+    const pose = P.pendulumPose(geometry, sample.theta, d.length);
     const isLocked = d.damping >= 1;
     const showHydraulics = d.damping > 0.001 && !isLocked;
     const anchorY = geometry.anchorY;
     const leftAnchorX = pivotX + geometry.leftAnchorOffset;
     const rightAnchorX = pivotX + geometry.rightAnchorOffset;
     // Keep each hydraulic mount on the displayed column.
-    const drawOffset = Math.sin(drawTheta) * Lpx;
-    const bobX = pivotX + drawOffset;
-    const bobY = pivotY + Math.cos(drawTheta) * Lpx;
+    const bobX = pivotX + pose.x;
+    const bobY = pose.y;
     const warmColor = strutHeatColor(sample.heat, run.energyScale);
 
     ctx.strokeStyle = "#1e2d36";
@@ -717,7 +711,8 @@ function drawStage(sample, run = sim, canvasId = "stage", options = {}) {
     ctx.shadowColor = "transparent";
     ctx.restore();
     if (showContact) {
-      const contact = run.state.contact;
+      // Mark the touching surface on this view's own pose and wall layout.
+      const contact = P.pendulumContactAt(geometry, P.clampDamper(d), sample.theta) || run.state.contact;
       const contactX = pivotX + contact.x, contactY = contact.y;
       ctx.save();
       ctx.strokeStyle = "#c65621";
@@ -1348,7 +1343,7 @@ function renderLeaderboards(results, pulse) {
   // Values are rounded to what is displayed so visible ties share a place.
   const round = (v, digits) => Number(v.toFixed(digits));
   const boards = [
-    { title: "Fastest to settle", note: "Must survive; sway within 10% of its own peak", settling: true, value: r => round(r.result.relativeSettleTime ?? r.result.settleTime, 2), show: v => `${fmt(v, 2)} s` },
+    { title: "Fastest to settle", note: "Must survive; last time outside ±0.06 m", settling: true, value: r => round(r.result.settleTime, 2), show: v => `${fmt(v, 2)} s` },
     dangerOn
       ? { title: "Least time in danger zone", note: "Must survive", value: r => round(r.result.overLimitTime || 0, 2), show: v => `${fmt(v, 2)} s` }
       : { title: "Least peak sway", note: "No danger zone on Easy", value: r => round(r.result.peakSway, 2), show: v => `${fmt(v, 2)} m` },
@@ -1482,8 +1477,7 @@ async function createClassRoom(preview = false) {
     amplitude: EARTHQUAKE_STRENGTHS[$("activeRoomStrength").value],
     pulseDuration: EARTHQUAKE_DURATION,
     difficulty: $("activeRoomDifficulty").value,
-    runDuration: Number($("roomRunDuration").value),
-    driftLimit: 1.2
+    runDuration: Number($("roomRunDuration").value)
   });
   localStorage.setItem(`tmd-teacher-${currentRoom.code}`, currentRoom.teacherToken);
   localStorage.setItem("tmd-last-teacher-room", currentRoom.code);

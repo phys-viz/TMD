@@ -121,7 +121,7 @@ async function startRun(path) {
     assert(started.quake.startedAt > Date.now(), "the intro finishes before the simulation clock begins");
     assert(started.results.some(r => r.result.status === 'standing'));
     assert(started.results.some(r => r.result.status === 'failed'));
-    assert(started.results.every(r => r.result.relativeSettleTime >= 3 && r.result.relativeSettleTime <= 20), "each tower gets a settle time relative to its own peak");
+    assert(started.results.every(r => r.result.relativeSettleTime === undefined && r.result.settleTime >= 3), "every board and table use the same ±0.06 m settling time");
     const replay = await startRun(`/api/rooms/${room.code}/replay`);
     assert.notEqual(replay.quake.id, started.quake.id, 'replay announces a distinct quake');
     assert.deepEqual(replay.results, started.results);

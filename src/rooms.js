@@ -132,8 +132,7 @@ function createRoom(body, assignedCode) {
       amplitude: physics.clamp(Number(body.amplitude) || physics.earthquakeStrengths.moderate, 0.18, 0.65),
       pulseDuration: physics.earthquakeDuration,
       difficulty,
-      runDuration: physics.clamp(Number(body.runDuration) || 120, 20, 120),
-      driftLimit: physics.clamp(Number(body.driftLimit) || 1.2, 0.3, 3)
+      runDuration: physics.clamp(Number(body.runDuration) || 120, 20, 120)
     }
   };
   return room;
@@ -196,7 +195,6 @@ function beginQuake(room) {
     collapseSway: difficulty.collapseSway,
     collapseTime: difficulty.collapseTime,
     runDuration: room.config.runDuration,
-    driftLimit: room.config.driftLimit,
     introDurationMs: 10000,
     startedAt: Date.now() + 10000
   };

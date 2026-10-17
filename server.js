@@ -137,7 +137,7 @@ const server = http.createServer(async (req, res) => {
       if (!student) return json(res, 404, { error: "Student token not found" });
       const error = submissionError(body.submission);
       if (error) return json(res, 400, { error });
-      student.submission = physics.clampDamper({ wallLimit: 2.7, ...body.submission });
+      student.submission = physics.clampDamper(body.submission);
       broadcast(room);
       return json(res, 200, { student, room: publicRoom(room) });
     }

@@ -63,7 +63,7 @@ TMD controls sit in a narrow vertical panel matching the tower identity to the l
 - Two hydraulic dampers act in parallel. The compact slider and two-decimal numeric field stay synchronized. At damping 0, the dampers disappear. Resistance increases nonlinearly above 0.8, progressively restricting motion and approaching a true lock at exactly 1.00. A locked bob still adds its mass to the tower; it is not equivalent to removing the TMD.
 - Earthquake amplitude settings are Gentle 0.18 m, Moderate 0.62 m, and Strong 0.65 m (waveform coefficients, not magnitudes or exact peak ground displacements). Moderate is calibrated so the default tower needs a useful TMD design to survive Medium.
 - Strong/Hard is calibrated for a tuned 8% mass TMD, leaving the 10% maximum as reserve. Successful designs remain sensitive to damping and length.
-- Hydraulic cylinder housings have a fixed visual length; their piston rods slide as the bob moves. Housings are mounted directly on the moving columns, and their mounting plates follow the column angle. Contact detection uses the same bob, housing-tip, and column surfaces as the drawing, without an invisible safety margin or display clamp. Integration locates the first surface contact within its timestep. The tower fails at contact, then holds the visible impact pose with a marker for 0.45 s before the collapse animation. The schematic uses 2.5× angular magnification and 15 pixels per meter of pendulum length, bounded to 45–190 pixels, preserving useful designs below maximum mass.
+- Hydraulic cylinder housings have a fixed visual length; their piston rods slide as the bob moves. Housings are mounted directly on the moving columns, and their mounting plates follow the column angle. Wall contact is decided in metres: the bob (radius 0.25 m + 3.5 × mass ratio) touches a wall when its horizontal offset `L·sinθ` plus its radius reaches the 2.8 m wall clearance, for every length and mass. The drawing maps that horizontal offset at a fixed cutaway scale, and the rigid rod is drawn at whatever angle puts the bob at that offset from the drawn walls, so a drawn touch is an actual touch. Housing-tip contact uses the same drawn bob, without an invisible safety margin or display clamp. Integration locates the first surface contact within its timestep. The tower fails at contact, then holds the visible impact pose with a marker for 0.45 s before the collapse animation. The drawn length is 15 pixels per metre, bounded to 45–190 pixels and never shorter than the drawn wall reach, so short pendulums can visibly reach any wall they can physically reach. The actual length is reported numerically.
 - Thermal energy is calculated from damping power; its solo numeric display is deferred. Hydraulic cylinder colors warm smoothly from gray toward a muted red over a broader heat range; calculated heat is unchanged.
 - Wall impacts are simulated from bob position and radius. The first wall hit collapses that tower on every difficulty, including Easy, and its graph identifies the failure cause. Official challenge scoring also fails a design at its first wall hit and stops that design's simulation there.
 
@@ -91,8 +91,10 @@ Hydraulic damping removes mechanical energy from pendulum motion. The damping co
 ```text
 resistance(d) = d                              for 0 <= d <= 0.8
 resistance(d) = 0.8 + (d - 0.8)/(5*(1 - d))    for 0.8 < d < 1
-b = damper_count * resistance(d) * 2*m*sqrt(g*L)
+b = damper_count * (1/9) * resistance(d) * 2*m*L*sqrt(g*L)
 ```
+
+`b` is a rotational coefficient in N·m·s, and `2*m*L*sqrt(g*L)` is the pendulum's critical rotational damping, so the damping ratio is `2/9 × resistance(d)` at every pendulum length. Changing length does not change the effective damping.
 
 Thermal power is:
 
