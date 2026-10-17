@@ -1108,8 +1108,8 @@ function renderRoom() {
   }
   $("designEntry").hidden = locked;
   if (locked) {
-    $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "";
-    $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100, 1) : "";
+    $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "0";
+    $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100, 1) : "0";
     $("submitDamping").value = latest.submission ? fmt(latest.submission.damping) : "0";
     $("submitState").textContent = "";
   } else if (wasLocked) {
@@ -1558,9 +1558,9 @@ $("joinForm").addEventListener("submit", async event => {
     sessionStorage.setItem(key, data.token);
     currentStudent = data.student;
     joinEditing = false;
-    // New assignments start blank; reconnecting restores only the pair's own submission.
-    $("submitLength").value = data.student.submission ? fmt(data.student.submission.length) : "";
-    $("submitMass").value = data.student.submission ? fmt(data.student.submission.massRatio * 100, 1) : "";
+    // New assignments start at zero; reconnecting restores only the pair's own submission.
+    $("submitLength").value = data.student.submission ? fmt(data.student.submission.length) : "0";
+    $("submitMass").value = data.student.submission ? fmt(data.student.submission.massRatio * 100, 1) : "0";
     $("submitDamping").value = data.student.submission ? fmt(data.student.submission.damping) : "0";
     currentRoom = data.room;
     connectRoom(code);

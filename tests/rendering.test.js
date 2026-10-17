@@ -51,7 +51,7 @@ function domElement(attributes = "") {
   const attr = name => attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? "";
   const classes = new Set();
   return {
-    value: attr("value"), defaultValue: attr("value"), min: attr("min"), max: attr("max"),
+    value: attr("value"), defaultValue: attr("value"), min: attr("min"), max: attr("max"), step: attr("step"),
     checked: /\bchecked\b/.test(attributes), width: Number(attr("width")), height: Number(attr("height")),
     listeners: {}, dataset: {},
     classList: {
@@ -133,7 +133,11 @@ vm.runInContext("resetLab()", app);
 
 assert.equal(state().damper.damping, 0, "Solo Lab starts with zero damping");
 assert.equal(Number(dom.compareDampingInput.value), 0, "comparison starts with zero damping");
-assert.equal(Number(dom.submitDamping.value), 0, "new challenge submissions start with zero damping");
+for (const [id, step] of [["submitLength", "0.05"], ["submitMass", "0.1"], ["submitDamping", "0.01"]]) {
+  assert.equal(Number(dom[id].value), 0, "every new student TMD field starts at zero");
+  assert.equal(dom[id].min, "0", "zero is a valid starting input value for native stepping");
+  assert.equal(dom[id].step, step, "student arrow controls have a concrete increment");
+}
 assert.strictEqual(vm.runInContext("graphRange().start", app), 0, "Solo graph starts at zero by default");
 assert.strictEqual(vm.runInContext("graphRange().end", app), 120, "Solo graph shows the full 120-second trial by default");
 const primaryTmdFields = ["lengthInput", "massInput", "dampingInput", "dampingSlider"];
@@ -615,7 +619,7 @@ vm.runInContext(`currentRoom.phase = "${savedRoomPhase}"; renderRoom()`, app);
 assert(!dom.studentTower.innerHTML.includes("Natural period"), "challenge hides the period");
 assert(!dom.studentTower.innerHTML.includes("calculated length"), "challenge hides the calculated TMD length");
 assert(dom.studentTower.innerHTML.includes("Use this height and mass in the Solo Lab"), "assignment explains the independent lab workflow");
-assert.equal(dom.submitLength.value, "", "rendering an assignment does not fill in a tuned length");
+assert.equal(dom.submitLength.value, "0", "rendering an assignment does not fill in a tuned length");
 const originalQueryAll = app.document.querySelectorAll;
 const views = ["lab", "student", "teacherLogin", "teacher", "city"].map(id => { dom[id].id = id; return dom[id]; });
 app.document.querySelectorAll = selector => selector === ".view" ? views : originalQueryAll(selector);
@@ -721,6 +725,12 @@ for (const damping of [0, .25, 1]) {
   for (const id of ['submitLength', 'submitMass', 'submitDamping', 'submitDesignBtn']) assert.equal(dom[id].disabled, false, "unlock re-enables student controls");
   assert.equal(dom.submitLength.max, '17.7');
   assert(html.includes('id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"'));
+  dom.submitLength.value = '0'; dom.submitMass.value = '0'; dom.submitDamping.value = '0';
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert.equal(dom.submitState.textContent, 'Enter a pendulum length from 0.7 to 17.7 m.', 'zero length is a placeholder, not a submittable design');
+  dom.submitLength.value = '8.4';
+  await dom.submitForm.listeners.submit({ preventDefault() {} });
+  assert.equal(dom.submitState.textContent, 'Enter TMD mass from 1 to 10%.', 'zero mass is a placeholder, not a submittable design');
   dom.submitLength.value = '17.8';
   await dom.submitForm.listeners.submit({ preventDefault() {} });
   assert(dom.submitState.textContent.includes('17.7'), "length above 17.7 m is rejected");
@@ -750,7 +760,13 @@ for (const damping of [0, .25, 1]) {
   dom.studentRoom.value = " submit "; dom.nickname.value = "Test Pair";
   let joinPath;
   app.api = async path => { joinPath = path; return { token: "student-token", student, room }; };
+  const previousStudentDesign = student.submission;
+  student.submission = null;
   await dom.joinForm.listeners.submit({ preventDefault() {} });
+  for (const id of ['submitLength', 'submitMass', 'submitDamping']) assert.equal(dom[id].value, '0', 'a newly joined student sees literal zero in every TMD field');
+  student.submission = previousStudentDesign;
+  await dom.joinForm.listeners.submit({ preventDefault() {} });
+  assert.equal(Number(dom.submitLength.value), previousStudentDesign.length, 'reconnection still restores an existing submitted design');
   assert.equal(joinPath, "/api/rooms/SUBMIT/join", "joining trims and normalizes the room code");
   assert(dom.studentTower.innerHTML.includes("345 m") && dom.studentTower.innerHTML.includes("11.5 million kg"), "successful browser join shows the assigned tower");
   assert.equal(vm.runInContext("currentStudent.id", app), "submit-test");

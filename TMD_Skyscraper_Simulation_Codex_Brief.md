@@ -130,3 +130,5 @@ When Install TMD is unchecked, disable that tower's length, mass, damping number
 Saved teacher room entries are validated against the server on page load, when returning to the browser, and when focusing the room selector. Confirmed HTTP 404 responses remove stale saved entries; temporary network, quota, and service errors retain their private keys for retry. Room updates preserve the dropdown selection, and late events from a previous room cannot replace the current room. Rooms still expire after 24 hours.
 
 The Join Challenge panel omits the introductory tagline and routine status line beneath Join / reconnect. Only actionable join errors appear there when a join attempt fails.
+
+Solo/Compare TMD panels use 14 px labels, 13 px units, and 16 px numeric values with taller fields. New Student designs initialize T, M, and D to zero. Native arrow increments are 0.05 m, 0.1% mass, and 0.01 damping, with a zero input minimum so stepping can start from zero. Submission still requires 0.7 to 17.7 m, 1 to 10% mass, and 0 to 1 damping; zero length/mass are starting placeholders. Reconnection restores submitted designs.

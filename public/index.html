@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-39">
+  <link rel="stylesheet" href="/styles.css?v=classroom-40">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -138,8 +138,8 @@
           <div id="studentTower" class="readout">Join a room to receive a tower.</div>
           <div id="designEntry">
           <div class="design-fields">
-          <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="submitLength" required type="number" min="0.7" max="17.7" step="0.05"></label>
-          <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="submitMass" required type="number" min="1" max="10" step="any"></label>
+          <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="submitLength" value="0" required type="number" min="0" max="17.7" step="0.05"></label>
+          <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="submitMass" value="0" required type="number" min="0" max="10" step="0.1"></label>
           <label><span class="tmd-variable"><strong>D</strong> Damping</span><input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
           </div>
           <button id="submitDesignBtn">Submit / revise before lock</button>
@@ -238,6 +238,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-47"></script>
+  <script src="/app.js?v=classroom-48"></script>
 </body>
 </html>

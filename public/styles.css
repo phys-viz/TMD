@@ -397,7 +397,7 @@ canvas {
   background: transparent;
   color: var(--section-accent);
   border-radius: 0;
-  font-size: .75rem;
+  font-size: .9rem;
   letter-spacing: 0;
   text-transform: none;
   white-space: nowrap;
@@ -414,7 +414,7 @@ canvas {
   gap: 5px;
   white-space: nowrap;
   cursor: pointer;
-  font-size: .72rem;
+  font-size: .875rem;
 }
 .stage-wrap .tmd-controls .check input {
   width: 14px;
@@ -426,7 +426,7 @@ canvas {
   flex: 0 0 auto;
   gap: 4px;
 }
-.stage-wrap .tmd-controls .field-row label { font-size: .7rem; white-space: nowrap; }
+.stage-wrap .tmd-controls .field-row label { font-size: .875rem; white-space: nowrap; }
 .damping-field { display: grid; gap: 3px; }
 .damping-control { display: flex; align-items: center; gap: 2px; }
 .stage-wrap .tmd-controls .damping-control input[type="range"] {
@@ -440,16 +440,16 @@ canvas {
 .stage-wrap .tmd-controls .damping-control input[type="number"] {
   width: 43px;
   padding-inline: 2px;
-  font-size: .7rem;
+  font-size: 1rem;
   appearance: textfield;
 }
 .damping-control input::-webkit-inner-spin-button,
 .damping-control input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .stage-wrap .tmd-controls input[type="number"] {
   min-width: 0;
-  min-height: 26px;
-  padding: 4px 5px;
-  font-size: .8rem;
+  min-height: 34px;
+  padding: 5px;
+  font-size: 1rem;
 }
 .stage-wrap > canvas {
   --tower-view-height: clamp(240px, calc(100dvh - 360px), 585px);
@@ -622,7 +622,7 @@ th { color: #425160; }
 #studentTower p { color: #445e6e; }
 .submission-summary { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #c4d6e2; }
 .submission-summary > strong { flex-basis: 100%; color: #286248; }
-.design-fields { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0; }
+.design-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 24px; margin: 8px 0; }
 #student .design-fields label { width: 165px; }
 #submitDesignBtn { min-width: 220px; }
 .teacher-layout { grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); align-items: start; margin-top: 12px; }
@@ -767,3 +767,7 @@ th { color: #425160; }
 .tmd-controls .field-row:has(input:disabled) { opacity: .5; }
 .tmd-controls input:disabled { cursor: not-allowed; background: #edf1f3; }
 #activeRoomSettingsStatus:empty { display: none; }
+
+.stage-wrap .tmd-controls .tmd-unit { font-size: .8125rem; }
+#student .design-fields input[type="number"] { appearance: auto; }
+#student .design-fields input[type="number"]::-webkit-inner-spin-button { opacity: 1; cursor: pointer; }
