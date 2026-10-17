@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tuned Mass Damper Skyscraper Lab</title>
-  <link rel="stylesheet" href="/styles.css?v=classroom-40">
+  <link rel="stylesheet" href="/styles.css?v=classroom-41">
   <link rel="preload" href="/east-coast.svg?v=1" as="image" type="image/svg+xml">
 </head>
 <body>
@@ -136,15 +136,15 @@
         <form id="submitForm" class="panel" novalidate>
           <h2>Submit Design</h2>
           <div id="studentTower" class="readout">Join a room to receive a tower.</div>
+          <p id="submitState" class="submission-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></p>
           <div id="designEntry">
           <div class="design-fields">
           <label><span class="tmd-variable"><strong>T</strong> Tuning</span><span class="tmd-unit">Length (m)</span><input id="submitLength" value="0" required type="number" min="0" max="17.7" step="0.05"></label>
           <label><span class="tmd-variable"><strong>M</strong> Mass</span><span class="tmd-unit">(% of tower)</span><input id="submitMass" value="0" required type="number" min="0" max="10" step="0.1"></label>
           <label><span class="tmd-variable"><strong>D</strong> Damping</span><input id="submitDamping" value="0" required type="number" min="0" max="1" step="0.01"></label>
           </div>
-          <button id="submitDesignBtn">Submit / revise before lock</button>
+          <button id="submitDesignBtn" type="submit">Submit design</button>
           </div>
-          <p id="submitState" class="muted" role="status" aria-live="polite"></p>
         </form>
       </div>
     </section>
@@ -181,8 +181,7 @@
           <div class="panel-heading"><h2>Classroom dashboard</h2>
           <button id="teacherLogoutBtn" class="button-secondary" type="button">Lock teacher access</button></div>
           <div class="room-picker">
-          <label>Your rooms <select id="teacherRooms"><option value="">Choose a previous room</option></select></label>
-          <button id="openTeacherRoomBtn" class="button-secondary" type="button">Open room</button>
+          <label>Your rooms <select id="teacherRooms"><option value="">Select a room</option></select></label>
           <button id="deleteRoomBtn" class="button-danger" disabled>Delete room</button>
           </div>
           <p id="teacherRoomStatus" class="muted" role="status"></p>
@@ -238,6 +237,6 @@
   </main>
 
   <script src="/physics.js?v=shared-geometry-12"></script>
-  <script src="/app.js?v=classroom-48"></script>
+  <script src="/app.js?v=classroom-49"></script>
 </body>
 </html>

@@ -11,6 +11,8 @@ let labPaused = false;
 let comparisonInitialized = false;
 let currentRoom = null;
 let currentStudent = null;
+let submittingDesign = null;
+let submissionFeedbackKey = "";
 let events = null;
 let teacherUnlocked = false;
 let creatingRoom = false;
@@ -969,6 +971,7 @@ function clearDeletedRoom(code, reason = "deleted") {
   localStorage.removeItem(`tmd-teacher-${code}`);
   if (localStorage.getItem("tmd-last-teacher-room") === code) localStorage.removeItem("tmd-last-teacher-room");
   sessionStorage.removeItem(`tmd-token-${code}`);
+  sessionStorage.removeItem(`tmd-student-id-${code}`);
   sessionStorage.removeItem(`tmd-nickname-${code}`);
   if (currentRoom?.code === code) {
     $("roomSettingsNotice").hidden = true;
@@ -984,7 +987,7 @@ function clearDeletedRoom(code, reason = "deleted") {
     $("studentState").textContent = "";
     $("studentState").hidden = true;
     $("studentTower").textContent = "Join a room to receive a tower.";
-    $("submitState").textContent = "";
+    submissionFeedback("");
     $("designEntry").hidden = false;
     showJoined(false);
     $("phaseSteps").innerHTML = "";
@@ -1058,6 +1061,57 @@ function renderRoomSettings(teacher) {
     ? "" : dirty ? "Unapplied changes." : "";
 }
 
+function studentContextKey() {
+  return currentRoom && currentStudent ? `${currentRoom.code}:${currentStudent.id}` : "";
+}
+
+function matchingDesign(a, b) {
+  return !!a && !!b && a.enabled === true && b.enabled === true &&
+    ["length", "massRatio", "damping"].every(key => Number.isFinite(a[key]) && Math.abs(a[key] - b[key]) < 1e-9);
+}
+
+function enteredDesign() {
+  return { enabled: true, length: Number($("submitLength").value), massRatio: Number($("submitMass").value) / 100, damping: Number($("submitDamping").value), wallLimit: 2.7 };
+}
+
+function submissionFeedback(text, kind = "info", reveal = false) {
+  submissionFeedbackKey = studentContextKey();
+  const status = $("submitState");
+  status.textContent = text;
+  status.dataset.kind = kind;
+  status.hidden = !text;
+  if (reveal) status.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+}
+
+function renderSubmissionFeedback() {
+  if (submissionFeedbackKey !== studentContextKey()) submissionFeedback("");
+  const locked = !currentRoom || !currentStudent || currentRoom.phase !== "design";
+  $("submitDesignBtn").disabled = locked || !!submittingDesign;
+  $("submitDesignBtn").textContent = submittingDesign ? "Submitting..." : !currentStudent ? "Join a room to submit" : locked ? "Designs locked" : currentStudent.submission?.enabled ? "Submit changes" : "Submit design";
+  if (submittingDesign?.key === studentContextKey()) return submissionFeedback("Submitting your design...", "pending");
+  if (["error", "warning"].includes($("submitState").dataset.kind)) return;
+  if (currentStudent?.submission?.enabled) {
+    const edited = !locked && (!["submitLength", "submitMass", "submitDamping"].every(id => String($(id).value).trim() !== "") || !matchingDesign(enteredDesign(), currentStudent.submission));
+    submissionFeedback(edited ? "Changes not submitted. Click Submit changes to save them." : "Design submitted! TMD saved for the next earthquake.", edited ? "warning" : "success");
+  }
+}
+
+// The teacher can test as a student in the same tab without losing that identity.
+function activateTeacherRoom(room) {
+  const previousCode = currentRoom?.code;
+  const previousStudent = currentStudent;
+  const token = typeof sessionStorage !== "undefined" && sessionStorage.getItem(`tmd-token-${room.code}`);
+  const id = previousCode === room.code && previousStudent ? previousStudent.id
+    : typeof sessionStorage !== "undefined" ? sessionStorage.getItem(`tmd-student-id-${room.code}`) : null;
+  currentRoom = room;
+  currentStudent = token ? room.students.find(student => student.id === id) || null : null;
+  if (currentStudent && (previousCode !== room.code || !previousStudent)) {
+    $("submitLength").value = currentStudent.submission ? fmt(currentStudent.submission.length) : "0";
+    $("submitMass").value = currentStudent.submission ? fmt(currentStudent.submission.massRatio * 100, 1) : "0";
+    $("submitDamping").value = currentStudent.submission ? fmt(currentStudent.submission.damping) : "0";
+  }
+}
+
 function renderRoom() {
   if (!currentRoom) return renderRoomSettings(teacherUnlocked);
   const teacher = teacherUnlocked && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
@@ -1070,7 +1124,7 @@ function renderRoom() {
   }[phase] || {};
   for (const id of ["lockBtn", "startBtn", "replayBtn", "unlockBtn"]) {
     $(id).hidden = !controls[id];
-    $(id).disabled = !teacher || !controls[id] || startingQuake || (id === "replayBtn" && !!currentRoom.quake?.preparing);
+    $(id).disabled = !teacher || !controls[id] || startingQuake || submittingDesign?.code === currentRoom.code || (id === "replayBtn" && !!currentRoom.quake?.preparing);
     $(id).className = `button-${controls[id] || "secondary"}`;
   }
   renderRoomSettings(teacher);
@@ -1084,17 +1138,17 @@ function renderRoom() {
   $("studentState").textContent = "";
   $("studentState").hidden = true;
   $("roster").querySelector("tbody").innerHTML = currentRoom.students.map(s => `<tr><td><strong>${escapeHtml(s.nickname)}</strong></td><td class="num">${fmt(s.tower.period)} s</td><td><span class="status-chip ${s.submission ? "status-submitted" : "status-none"}">${s.submission ? "Submitted" : "Not submitted"}</span></td><td class="num">${s.submission ? `${fmt(s.submission.length)} m` : "—"}</td><td class="num">${s.submission ? `${fmt(s.submission.massRatio * 100, 1)}%` : "—"}</td><td class="num">${s.submission ? fmt(s.submission.damping) : "—"}</td><td><button type="button" class="remove-group" data-student-id="${escapeHtml(s.id)}" aria-label="Remove ${escapeHtml(s.nickname)}" ${teacher ? "" : "disabled"}>✕</button></td></tr>`).join("");
-  const wasLocked = $("submitLength").disabled;
   const locked = phase !== "design" || !currentStudent;
-  ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = locked; });
-  if (!currentStudent) return showJoined(false);
+  ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = locked || !!submittingDesign; });
+  if (!currentStudent) { renderSubmissionFeedback(); return showJoined(false); }
   const latest = currentRoom.students.find(s => s.id === currentStudent.id);
   if (!latest) {
     currentStudent = null;
     sessionStorage.removeItem(`tmd-token-${currentRoom.code}`);
+    sessionStorage.removeItem(`tmd-student-id-${currentRoom.code}`);
     ["submitLength", "submitMass", "submitDamping", "submitDesignBtn"].forEach(id => { $(id).disabled = true; });
     $("studentTower").textContent = "Your group was removed from this room by the teacher.";
-    $("submitState").textContent = "";
+    submissionFeedback("");
     $("designEntry").hidden = false;
     return showJoined(false);
   }
@@ -1111,10 +1165,8 @@ function renderRoom() {
     $("submitLength").value = latest.submission ? fmt(latest.submission.length) : "0";
     $("submitMass").value = latest.submission ? fmt(latest.submission.massRatio * 100, 1) : "0";
     $("submitDamping").value = latest.submission ? fmt(latest.submission.damping) : "0";
-    $("submitState").textContent = "";
-  } else if (wasLocked) {
-    $("submitState").textContent = "Room reopened. Change your settings and click Submit / revise to save them for the next earthquake.";
   }
+  renderSubmissionFeedback();
   const lockBanner = !locked ? "" : `<div class="lock-banner" role="status"><span aria-hidden="true">🔒</span> ${phase === "running" ? "Earthquake underway — watch the board!" : "Designs locked — watch the board."}${latest.submission ? "" : " No design was submitted, so your tower is tested without a TMD."}</div>`;
   $("studentTower").innerHTML = `${lockBanner}<p class="round-settings">Current round: ${roomScenarioText(currentRoom.config)}</p><div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your tower from collapsing during an earthquake.</p>${latest.submission ? `<div class="submission-summary"><strong>Saved design</strong><span>Pendulum length: ${fmt(latest.submission.length)} m</span><span>TMD mass: ${fmt(latest.submission.massRatio * 100, 1)}%</span><span>Damping: ${fmt(latest.submission.damping)}</span></div>` : ""}`;
   $("joinedSummary").innerHTML = `<strong>${escapeHtml(latest.nickname)}</strong> · Room ${escapeHtml(currentRoom.code)} · ${escapeHtml(phaseLabel)}`;
@@ -1439,12 +1491,11 @@ function renderTeacherRooms() {
   const selected = $("teacherRooms").value;
   const active = currentRoom?.code || "";
   const last = localStorage.getItem("tmd-last-teacher-room");
-  $("teacherRooms").innerHTML = '<option value="">Choose a previous room</option>' + Array.from(codes).map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join("");
+  $("teacherRooms").innerHTML = '<option value="">Select a room</option>' + Array.from(codes).map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join("");
   $("teacherRooms").value = active !== listedTeacherRoom && codes.has(active) ? active
     : codes.has(selected) ? selected : codes.has(active) ? active : codes.has(last) ? last : "";
   listedTeacherRoom = active;
   $("teacherRooms").disabled = openingTeacherRoom;
-  $("openTeacherRoomBtn").disabled = openingTeacherRoom || !$("teacherRooms").value;
 }
 
 function loadSavedTeacherRoom(code) {
@@ -1488,19 +1539,17 @@ async function restoreSavedTeacherRoom() {
       return;
     }
     if (currentRoom || openingTeacherRoom) return;
-    currentRoom = room;
+    activateTeacherRoom(room);
     connectRoom(code);
     renderRoom();
     renderCity();
   } catch (error) { $("teacherRoomStatus").textContent = error.message; }
 }
 
-$("teacherRooms").addEventListener("change", () => {
-  $("openTeacherRoomBtn").disabled = openingTeacherRoom || !$("teacherRooms").value;
-});
 $("teacherRooms").addEventListener("focus", () => refreshSavedTeacherRooms());
 window.addEventListener?.("focus", () => refreshSavedTeacherRooms());
-$("openTeacherRoomBtn").addEventListener("click", async () => {
+$("teacherRooms").addEventListener("change", () => openTeacherRoom());
+async function openTeacherRoom() {
   const code = $("teacherRooms").value;
   if (!code || openingTeacherRoom) return;
   openingTeacherRoom = true;
@@ -1512,8 +1561,7 @@ $("openTeacherRoomBtn").addEventListener("click", async () => {
       $("teacherRoomStatus").textContent = `Room ${code} expired or is no longer available and was removed from saved rooms.`;
       return;
     }
-    currentRoom = room;
-    currentStudent = null;
+    activateTeacherRoom(room);
     localStorage.setItem("tmd-last-teacher-room", code);
     connectRoom(code);
     renderRoom();
@@ -1524,7 +1572,7 @@ $("openTeacherRoomBtn").addEventListener("click", async () => {
     openingTeacherRoom = false;
     renderTeacherRooms();
   }
-});
+}
 
 $("roomForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -1556,6 +1604,8 @@ $("joinForm").addEventListener("submit", async event => {
   try {
     const data = await api(`/api/rooms/${code}/join`, { nickname, token });
     sessionStorage.setItem(key, data.token);
+    sessionStorage.setItem(`tmd-student-id-${code}`, data.student.id);
+    submissionFeedbackKey = "";
     currentStudent = data.student;
     joinEditing = false;
     // New assignments start at zero; reconnecting restores only the pair's own submission.
@@ -1565,7 +1615,7 @@ $("joinForm").addEventListener("submit", async event => {
     currentRoom = data.room;
     connectRoom(code);
     renderRoom();
-    $("submitState").textContent = data.student.submission ? "Your saved design is restored. You can revise it before the room is locked." : "Enter your tested settings, then submit your design.";
+    renderSubmissionFeedback();
   } catch (error) {
     $("studentState").textContent = `Could not join: ${error.message}`;
     $("studentState").hidden = false;
@@ -1583,17 +1633,18 @@ $("changeJoinBtn").addEventListener("click", () => {
   $("nickname").focus?.();
 });
 
+["submitLength", "submitMass", "submitDamping"].forEach(id => {
+  $(id).addEventListener("input", () => {
+    submissionFeedback("");
+    if (currentStudent?.submission?.enabled && matchingDesign(enteredDesign(), currentStudent.submission)) renderSubmissionFeedback();
+    else submissionFeedback("Changes not submitted. Submit your design to save them.", "warning");
+  });
+});
 $("submitForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const status = $("submitState");
-  if (!currentRoom || !currentStudent) {
-    status.textContent = "Join a challenge room before submitting your design.";
-    return;
-  }
-  if (currentRoom.phase !== "design") {
-    status.textContent = "This room is locked. Designs cannot be submitted or revised after the teacher locks or starts it.";
-    return;
-  }
+  if (submittingDesign) return;
+  if (!currentRoom || !currentStudent) return submissionFeedback("Join a challenge room before submitting your design.", "error", true);
+  if (currentRoom.phase !== "design") return submissionFeedback("This room is locked. Designs cannot be submitted or revised after the teacher locks or starts it.", "error", true);
   const fields = [
     ["submitLength", .7, 17.7, "Enter a pendulum length from 0.7 to 17.7 m."],
     ["submitMass", 1, 10, "Enter TMD mass from 1 to 10%."],
@@ -1601,33 +1652,33 @@ $("submitForm").addEventListener("submit", async event => {
   ];
   for (const [id, min, max, message] of fields) {
     const value = Number($(id).value);
-    if ($(id).value.trim() === "" || !Number.isFinite(value) || value < min || value > max) {
-      status.textContent = message;
+    if (String($(id).value).trim() === "" || !Number.isFinite(value) || value < min || value > max) {
       $(id).focus?.();
-      return;
+      return submissionFeedback(message, "error", true);
     }
   }
-  $("submitDesignBtn").disabled = true;
-  status.textContent = "Submitting your design...";
+  const request = { key: studentContextKey(), code: currentRoom.code, studentId: currentStudent.id, design: enteredDesign() };
+  submittingDesign = request;
+  renderRoom();
   try {
-    const data = await api(`/api/rooms/${currentRoom.code}/submit`, {
-      token: sessionStorage.getItem(`tmd-token-${currentRoom.code}`),
-      submission: {
-        enabled: true,
-        length: Number($("submitLength").value),
-        massRatio: Number($("submitMass").value) / 100,
-        damping: Number($("submitDamping").value),
-        wallLimit: 2.7
-      }
+    const data = await api(`/api/rooms/${request.code}/submit`, {
+      token: sessionStorage.getItem(`tmd-token-${request.code}`), submission: request.design
     });
-    currentRoom = data.room;
-    currentStudent = data.student;
-    renderRoom();
-    status.textContent = "Design submitted! Your teacher can see it. You can revise it until the room is locked.";
+    if (data.student?.id !== request.studentId || !matchingDesign(data.student.submission, request.design)) throw new Error("The server did not confirm these settings. Please submit again.");
+    if (studentContextKey() === request.key) {
+      // Preserve a newer lock/countdown/results event instead of replacing the
+      // entire room with an older HTTP response from the design phase.
+      const latest = currentRoom.students.find(student => student.id === request.studentId);
+      if (latest) latest.submission = data.student.submission;
+      currentStudent = latest || data.student;
+      submissionFeedback("Design submitted! TMD saved for the next earthquake.", "success", true);
+    }
   } catch (error) {
-    status.textContent = `Design was not submitted: ${error.message}`;
+    if (studentContextKey() === request.key) submissionFeedback(`Design was not submitted: ${error.message}`, "error", true);
   } finally {
-    $("submitDesignBtn").disabled = currentRoom?.phase !== "design";
+    submittingDesign = null;
+    renderRoom();
+    renderCity();
   }
 });
 

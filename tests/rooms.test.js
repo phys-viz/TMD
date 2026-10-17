@@ -194,6 +194,11 @@ async function startRun(path) {
     assert.equal(revised.student.submission.damping, .2, "unlock permits revisions");
     const firstRun = await startRun(`/api/rooms/${regular.code}/start`);
     const originalResult = firstRun.students.find(s => s.id === joined.student.id).result;
+    const submittedTower = firstRun.students.find(s => s.id === joined.student.id);
+    assert.equal(submittedTower.submission.enabled, true, "the joined student's confirmed TMD reaches the scored City snapshot");
+    assert.deepEqual(submittedTower.submission, revised.student.submission, "scoring receives the exact design confirmed to the student");
+    assert(submittedTower.result.samples.theta.some(angle => angle !== 0), "the scored submitted tower contains pendulum motion");
+    assert.equal(firstRun.results.find(entry => entry.studentId === joined.student.id).submission.enabled, true, "the official result retains its installed TMD");
     await post(`/api/rooms/${regular.code}/unlock`);
     const revision = { enabled: true, length: 17.7, massRatio: .1, damping: 1 };
     await post(`/api/rooms/${regular.code}/submit`, { token: joined.token, submission: revision });

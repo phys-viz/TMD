@@ -771,3 +771,10 @@ th { color: #425160; }
 .stage-wrap .tmd-controls .tmd-unit { font-size: .8125rem; }
 #student .design-fields input[type="number"] { appearance: auto; }
 #student .design-fields input[type="number"]::-webkit-inner-spin-button { opacity: 1; cursor: pointer; }
+
+#submitState { margin: 14px 0; padding: 12px 14px; border: 1px solid #aebec9; border-left-width: 4px; border-radius: 6px; font-size: 1rem; font-weight: 700; color: #314b59; background: #eef3f7; }
+#submitState[data-kind="success"] { color: #1e613d; background: #e3f3e9; border-color: #5c9b77; }
+#submitState[data-kind="error"] { color: #922c28; background: #fff0ee; border-color: #c6756f; }
+#submitState[data-kind="warning"] { color: #785315; background: #fff4dd; border-color: #c9a457; }
+
+#submitState:empty { display: none; }
