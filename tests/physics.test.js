@@ -118,9 +118,10 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45 };
   for (const damping of [0.1, 0.25, 0.45, 0.7, 0.9]) {
     assert.strictEqual(resultFor(0.01, damping).status, "failed", `1 percent mass is insufficient at damping ${damping}`);
   }
-  assert.strictEqual(resultFor(0.05, 0.1).status, "failed", "too little damping fails the representative design");
-  assert.strictEqual(resultFor(0.05, 0.45).status, "standing", "a tuned middle-damping design can survive Medium");
-  assert.strictEqual(resultFor(0.05, 0.9).status, "failed", "too much damping fails the representative design");
+  // Near the lightest working mass, damping still has a useful middle range.
+  assert.strictEqual(resultFor(0.04, 0.05).status, "failed", "too little damping fails the representative design");
+  assert.strictEqual(resultFor(0.04, 0.45).status, "standing", "a tuned middle-damping design can survive Medium");
+  assert.strictEqual(resultFor(0.04, 0.9).status, "failed", "too much damping fails the representative design");
   assert.strictEqual(resultFor(0.06, 0.45, 2).status, "failed", "a badly mistuned pendulum fails Medium");
   for (let index = 0; index < 24; index++) {
     const scenario = P.generateTower("freshman-lab", index);
@@ -133,8 +134,10 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45 };
   const strongHard = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, collapseTime: 2.5 };
   const design = { ...P.defaultDamperFor(classroomTower), length: 8.4, massRatio: 0.08 };
   assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, damping: 0.25 }, strongHard).status, "standing", "Strong/Hard has a successful design at the visible default length");
+  // Closer to the lightest working mass, damping must stay in a middle range.
+  assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, massRatio: 0.06, damping: 0.25 }, strongHard).status, "standing", "a lighter Strong/Hard design survives with middle damping");
   for (const damping of [0.1, 0.9]) {
-    assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, damping }, strongHard).status, "failed", "Strong/Hard still rejects excessive or insufficient damping");
+    assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, massRatio: 0.06, damping }, strongHard).status, "failed", "Strong/Hard still rejects excessive or insufficient damping");
   }
   assert.strictEqual(P.evaluateDesign(classroomTower, { ...design, massRatio: 0.01, damping: 0.45 }, strongHard).status, "failed", "Strong/Hard needs sufficient damper mass");
   for (const limit of [2.5, 3]) {
@@ -172,7 +175,7 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45 };
   for (const height of [170, 260, 350]) {
     for (const mass of [7.5e6, 11.3e6, 15e6]) {
       const scenario = P.createLabTower(height, mass);
-      assert(scenario.period >= 4.8 && scenario.period <= 7, "every editable tower stays in the stopwatch range");
+      assert(scenario.period >= 5.5 && scenario.period <= 7, "every editable tower stays in the stopwatch range");
       const free = P.simulate({
         tower: scenario, damper: { enabled: false }, initialX: 0.2,
         pulse: { amplitude: 0, dangerEnabled: false }, duration: 30, sampleDt: 0.02
@@ -194,6 +197,21 @@ const pulse = { amplitude: 0.42, duration: 1.8, runDuration: 45 };
       assert.strictEqual(P.evaluateDesign(scenario, { enabled: false }, strongHard).status, "failed", "editable Hard/Strong towers still need a working TMD");
     }
   }
+  // Each tower's danger limit tracks its own quake response, so the towers that
+  // were hardest under the old fixed formula (period near 5.9 s) are not outliers.
+  for (const [height, mass] of [[350, 8.5e6], [260, 11.5e6], [200, 15e6]]) {
+    const scenario = P.createLabTower(height, mass);
+    const strongHard = { ...P.defaultPulse(), amplitude: P.earthquakeStrengths.strong, collapseTime: 2.5, collapseSway: scenario.dangerSwayLimit };
+    const damper = { ...P.defaultDamperFor(scenario), massRatio: 0.08, damping: 0.25 };
+    assert.strictEqual(P.evaluateDesign(scenario, damper, strongHard).status, "standing", `${height} m / ${mass} kg tower has a successful 8 percent design`);
+    assert.strictEqual(P.evaluateDesign(scenario, { enabled: false }, strongHard).status, "failed", "formerly hardest towers still need a working TMD");
+  }
+  const sameRatio = [P.createLabTower(170, 7.5e6), P.createLabTower(350, 15e6)].map(scenario => {
+    const bare = P.simulate({ tower: scenario, damper: { enabled: false }, pulse: { amplitude: P.earthquakeStrengths.moderate, dangerEnabled: false }, duration: 3 + 1.5 * scenario.period, sampleDt: 0.004 });
+    const peak = Math.max(...bare.samples.filter(s => s.t >= 3).map(s => Math.abs(s.sway)));
+    return peak / scenario.dangerSwayLimit * Math.sqrt(scenario.period / 6);
+  });
+  close(sameRatio[0], sameRatio[1], 0.01, "shortest and longest towers start equally far into their danger zones");
   const soloDefault = P.createLabTower(345, 11.5e6);
   const moderate = P.defaultPulse();
   const tuned = { ...P.defaultDamperFor(soloDefault), massRatio: 0.05, damping: 0.45 };
@@ -312,7 +330,7 @@ function contactAngle(tower, damper, side, sway = 0) {
   const finalSample = result.samples.at(-1);
   close(P.pendulumContact(scenario, damper, finalSample.theta, finalSample.sway).clearance, 0, 0.000001, "official scoring ends at visible surface contact");
   assert.strictEqual(P.pendulumContact(scenario, damper, finalSample.theta, finalSample.sway).kind, "wall", "Strong can produce a visible building-wall impact");
-  const housingDesign = { ...damper, length: 9, damping: 0.01 };
+  const housingDesign = { ...damper, length: 10.3, damping: 0.01 };
   const housingRun = P.evaluateDesign(scenario, housingDesign, strong);
   assert.strictEqual(housingRun.status, "failed", "a preset-driven outer-housing impact is terminal even on Easy");
   assert.strictEqual(housingRun.hits, 1, "the first outer-housing impact ends the trial");

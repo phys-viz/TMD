@@ -16,12 +16,19 @@
   // maps these distances so a drawn touch is an actual touch.
   const wallClearance = 2.8;
   const impactRestitution = 0.3;
+  // Game danger limit: each tower's own no-TMD sway after a Moderate quake,
+  // divided by this ratio, so every tower starts equally far into its danger
+  // zone. sqrt(T / 6 s) gives slower towers, which decay more slowly in
+  // seconds, a matching allowance.
+  const dangerRatio = 1.55;
+  // Drawn pendulum length grows steadily from the wall reach at the shortest setting.
+  const lengthPxPerMeter = 7.5;
   const earthquakeDuration = 3.0;
   const earthquakeStrengths = Object.freeze({ gentle: 0.18, moderate: 0.62, strong: 0.65 });
   const labTowerLimits = Object.freeze({
     minHeight: 170, maxHeight: 350,
     minMass: 7.5e6, maxMass: 15e6,
-    minPeriod: 4.8, maxPeriod: 7.0
+    minPeriod: 5.5, maxPeriod: 7.0
   });
 
   function hashSeed(seed) {
@@ -83,23 +90,22 @@
 
   function generateTower(seed, index) {
     const r = rng(`${seed}:tower:${index}`);
-    const period = 4.8 + r() * 2.2;
+    const period = labTowerLimits.minPeriod + r() * (labTowerLimits.maxPeriod - labTowerLimits.minPeriod);
     const mass = 7.5e6 + r() * 7.5e6;
     const dampingRatio = 0.008 + r() * 0.007;
     const omega = 2 * Math.PI / period;
     const stiffness = mass * omega * omega;
     const damping = 2 * dampingRatio * Math.sqrt(stiffness * mass);
-    return {
+    const tower = {
       name: `Tower ${index + 1}`,
       height: Math.round(170 + r() * 180),
       period,
       mass,
       stiffness,
       damping,
-      dampingRatio,
-      // Game tolerance balances the shorter-period towers under a common quake.
-      dangerSwayLimit: Math.round(dangerSway * Math.max(1, (6 / period) ** 2) * 100) / 100
+      dampingRatio
     };
+    return { ...tower, dangerSwayLimit: dangerLimitFor(tower) };
   }
 
   function generateChallengeTower(seed, index) {
@@ -122,16 +128,28 @@
       (size - 1) / (maxSize - 1), limits.minPeriod, limits.maxPeriod);
     const dampingRatio = 0.005;
     const stiffness = cleanMass * Math.pow(2 * Math.PI / period, 2);
-    return {
+    const tower = {
       name: "Lab tower",
       height: cleanHeight,
       mass: cleanMass,
       period,
       stiffness,
       dampingRatio,
-      damping: 2 * dampingRatio * Math.sqrt(stiffness * cleanMass),
-      dangerSwayLimit: Math.round(dangerSway * Math.max(1, (6 / period) ** 2) * 100) / 100
+      damping: 2 * dampingRatio * Math.sqrt(stiffness * cleanMass)
     };
+    return { ...tower, dangerSwayLimit: dangerLimitFor(tower) };
+  }
+
+  // Peak sway of the bare tower after a Moderate quake ends. Sway scales with
+  // quake strength, so the ratio to this limit is the same for every tower.
+  function dangerLimitFor(tower) {
+    const pulse = { amplitude: earthquakeStrengths.moderate, duration: earthquakeDuration };
+    let state = initialState(), peak = 0;
+    while (state.t < earthquakeDuration + 1.5 * tower.period) {
+      state = rk4Step(state, trialStep, tower, null, pulse);
+      if (state.t >= earthquakeDuration) peak = Math.max(peak, Math.abs(state.x - baseMotion(state.t, pulse).y));
+    }
+    return peak / dangerRatio * Math.sqrt(tower.period / 6);
   }
 
   function defaultPulse() {
@@ -292,12 +310,12 @@
     const pxPerMeter = (layout.towerWidth / 2 - columnWidth / 2) / wallClearance;
     const radius = bobRadius(d.massRatio);
     const bobRadiusPx = radius * pxPerMeter;
-    // Schematic length, at least long enough for the drawn bob to reach any
-    // wall the real bob can reach. The actual length is reported numerically.
-    const lengthPx = clamp(Math.max(d.length * 15, pxPerMeter * Math.min(d.length, wallClearance)), 45, 190);
-    // Keep mounts above the bob for short pendulums, leaving room for each
-    // rigid housing; longer pendulums use the same upper-column mounting area.
-    const anchorY = top + clamp(lengthPx - 70, 16, 60);
+    // Schematic length: every setting reaches the drawn wall, and each metre adds
+    // the same visible length. The actual length is reported numerically.
+    const lengthPx = pxPerMeter * wallClearance + lengthPxPerMeter * (d.length - 0.7);
+    // Mount each rigid housing a fixed height above the bob's resting position,
+    // so a swinging bob reaches the housing tips at nearly the same offset at every length.
+    const anchorY = Math.max(top + 16, pivotY + lengthPx - 70);
     const mountSlope = sway * layout.swayScale / (bottom - top);
     const shearOffset = -mountSlope * (anchorY - top);
     const leftAnchorOffset = -layout.towerWidth / 2 + shearOffset, rightAnchorOffset = layout.towerWidth / 2 + shearOffset;

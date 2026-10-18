@@ -528,7 +528,9 @@ for (const count of [1, 12]) for (const height of [170, 350]) for (const theta o
     const path = commands.slice(0, rod.index);
     const from = path.findLast(d => d.method === "moveTo").args;
     const to = path.findLast(d => d.method === "lineTo").args;
-    assert(Math.abs(Math.hypot(to[0] - from[0], to[1] - from[1]) * displayScale - 154.5 * displayScale) < 1e-9,
+    const TP = app.window.TMDPhysics;
+    const expectedPx = TP.pendulumGeometry(TP.createLabTower(height, 11.5e6), { enabled: true, length: 10.3, massRatio: .04, damping: 0 }).lengthPx;
+    assert(Math.abs(Math.hypot(to[0] - from[0], to[1] - from[1]) * displayScale - expectedPx * displayScale) < 1e-9,
       "displayed City rod length stays constant as it swings");
   }
   const layout = app.window.TMDPhysics.towerGeometry(app.window.TMDPhysics.createLabTower(height, 11.5e6));
