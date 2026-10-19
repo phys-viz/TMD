@@ -880,11 +880,11 @@ function syncCompareLayout() {
   const comparing = !!compareSim;
   $("labSimulation").classList.toggle("compare-mode", comparing);
   $("compareTower").hidden = !comparing;
-  $("tmdHeading").textContent = comparing ? "Tower B" : "Tower";
-  $("stage").setAttribute("aria-label", comparing ? "Tower B motion" : "Tower motion");
-  $("graph").setAttribute("aria-label", comparing ? "Tower B roof sway over time" : "Tower roof sway over time");
-  $("graphStartInput").setAttribute("aria-label", `${comparing ? "Tower B" : "Tower"} graph start time in seconds`);
-  $("graphEndInput").setAttribute("aria-label", `${comparing ? "Tower B" : "Tower"} graph end time in seconds`);
+  $("tmdHeading").textContent = comparing ? "Building B" : "Building";
+  $("stage").setAttribute("aria-label", comparing ? "Building B motion" : "Building motion");
+  $("graph").setAttribute("aria-label", comparing ? "Building B roof sway over time" : "Building roof sway over time");
+  $("graphStartInput").setAttribute("aria-label", `${comparing ? "Building B" : "Building"} graph start time in seconds`);
+  $("graphEndInput").setAttribute("aria-label", `${comparing ? "Building B" : "Building"} graph end time in seconds`);
 }
 
 function renderRun(run, prefix, canvasId) {
@@ -982,7 +982,7 @@ function clearDeletedRoom(code, reason = "deleted") {
     $("roomState").textContent = unavailable ? "Room expired or no longer available. Create or open another room." : "Room deleted. Create or open another room.";
     $("studentState").textContent = "";
     $("studentState").hidden = true;
-    $("studentTower").textContent = "Join a room to receive a tower.";
+    $("studentTower").textContent = "Join a room to receive a building.";
     submissionFeedback("");
     $("designEntry").hidden = false;
     showJoined(false);
@@ -1041,7 +1041,7 @@ function renderRoomSettings(teacher) {
   }
   if (lastRoomScenario?.code !== currentRoom.code || currentRoom.phase !== "design") $("roomSettingsNotice").hidden = true;
   if (lastRoomScenario?.code === currentRoom.code && lastRoomScenario.signature !== signature) {
-    $("roomSettingsNotice").textContent = `Room settings updated: ${roomScenarioText(currentRoom.config)}. Your tower and saved design stay the same.`;
+    $("roomSettingsNotice").textContent = `Room settings updated: ${roomScenarioText(currentRoom.config)}. Your building and saved design stay the same.`;
     $("roomSettingsNotice").hidden = false;
   }
   lastRoomScenario = { code: currentRoom.code, signature };
@@ -1167,8 +1167,8 @@ function renderRoom() {
     $("submitDamping").value = latest.submission ? fmt(latest.submission.damping) : "0";
   }
   renderSubmissionFeedback();
-  const lockBanner = !locked ? "" : `<div class="lock-banner" role="status"><span aria-hidden="true">🔒</span> ${phase === "running" ? "Earthquake underway — watch the board!" : "Designs locked — watch the board."}${latest.submission ? "" : " No design was submitted, so your tower is tested without a TMD."}</div>`;
-  $("studentTower").innerHTML = `${lockBanner}<p class="round-settings">Current round: ${roomScenarioText(currentRoom.config)}</p><div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Tower mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your tower from collapsing during an earthquake.</p>`;
+  const lockBanner = !locked ? "" : `<div class="lock-banner" role="status"><span aria-hidden="true">🔒</span> ${phase === "running" ? "Earthquake underway — watch the board!" : "Designs locked — watch the board."}${latest.submission ? "" : " No design was submitted, so your building is tested without a TMD."}</div>`;
+  $("studentTower").innerHTML = `${lockBanner}<p class="round-settings">Current round: ${roomScenarioText(currentRoom.config)}</p><div class="assignment-heading"><strong>${escapeHtml(latest.nickname)} — ${escapeHtml(latest.tower.name)}</strong><span class="status-chip ${latest.submission ? "status-submitted" : "status-none"}">${latest.submission ? "Design submitted" : "Not submitted"}</span></div><div class="tower-facts"><div><span>Height</span> <strong>${latest.tower.height} m</strong></div><div><span>Building mass</span> <strong>${(latest.tower.mass / 1e6).toFixed(1)} million kg</strong></div></div><p>Use this height and mass in the Solo Lab. Measure the period and tune your TMD with the proper damping to prevent your building from collapsing during an earthquake.</p>`;
   $("joinedSummary").innerHTML = `<strong>${escapeHtml(latest.nickname)}</strong> · Room ${escapeHtml(currentRoom.code)} · ${escapeHtml(phaseLabel)}`;
   if (!joinEditing) showJoined(true);
 }
@@ -1220,6 +1220,204 @@ function canSkipCityResults() {
   return teacherUnlocked && !currentStudent && currentRoom && typeof localStorage !== "undefined" && !!localStorage.getItem(`tmd-teacher-${currentRoom.code}`);
 }
 
+// Just for fun: one local landmark joins each skyline. It is not simulated or
+// scored; it wobbles with the shaking and always collapses at five seconds.
+const LANDMARK_COLLAPSE_TIME = 5;
+const LANDMARKS = {
+  suvios: { label: "Suvio's 🍕", aspect: 0.78 },
+  mhs: { label: "Morristown High 🏫", aspect: 0.62 }
+};
+
+// Every screen picks the same landmark and slot from the shared quake ID.
+function cityLandmark(seed, groupCount) {
+  const random = P.rng(`${seed}:landmark`);
+  return { kind: random() < 0.5 ? "suvios" : "mhs", slot: Math.floor(random() * (groupCount + 1)) };
+}
+
+function drawCityLandmark(ctx, kind, cx, groundY, width, t, pulse, aftermath) {
+  const W = width, H = width * LANDMARKS[kind].aspect;
+  const duration = pulse?.duration ?? EARTHQUAKE_DURATION;
+  const shaking = pulse && t > 0 && t < duration;
+  const groundX = pulse ? P.baseMotion(t, pulse).y * 40 : 0;
+  const progress = aftermath ? 1 : pulse ? P.clamp((t - LANDMARK_COLLAPSE_TIME) / 1.2, 0, 1) : 0;
+  const fall = progress * progress;
+  // Cartoon wobble: strong while shaking, fading after, then a last shudder before it goes.
+  let wobble = 0;
+  if (pulse && t > 0 && progress === 0) {
+    const amount = shaking ? 0.07 : 0.035 * Math.exp(-(t - duration) / 1.5);
+    wobble = amount * Math.sin(2 * Math.PI * 2.2 * t);
+    if (t > LANDMARK_COLLAPSE_TIME - 0.6) wobble += 0.045 * Math.sin(2 * Math.PI * 9 * t);
+  }
+  ctx.save();
+  ctx.translate(cx + groundX, groundY);
+  ctx.save();
+  ctx.rotate(wobble + 0.12 * fall);
+  ctx.scale(1 + 0.15 * fall, 1 - 0.86 * fall);
+  if (kind === "suvios") drawSuvios(ctx, W, H, progress); else drawMorristownHigh(ctx, W, H, progress);
+  ctx.restore();
+  if (progress > 0) drawLandmarkRubble(ctx, kind, W, H, progress, fall);
+  ctx.restore();
+}
+
+function drawSuvios(ctx, W, H, progress) {
+  const stone = H * 0.48, awning = H * 0.05, mansardTop = H * 0.8;
+  ctx.fillStyle = "#6f6a64";
+  ctx.fillRect(-W / 2, -stone, W, stone);
+  ctx.fillStyle = "rgba(255, 255, 255, .12)";
+  for (let row = 0; row < 5; row++) for (let col = 0; col < 7; col++) {
+    ctx.fillRect(-W / 2 + (col + (row % 2) * 0.5) * W / 7, -stone + row * stone / 5 + 1, W / 7 - 2, stone / 5 - 2);
+  }
+  // Warm windows and a glowing door.
+  const glow = progress > 0 ? "#b98a3a" : "#f6c25b";
+  ctx.fillStyle = glow;
+  for (const side of [-1, 1]) {
+    const x = side * W * 0.27;
+    ctx.beginPath();
+    ctx.moveTo(x - W * 0.17, -stone * 0.25); ctx.lineTo(x + W * 0.17, -stone * 0.25);
+    ctx.lineTo(x + W * 0.2, -stone * 0.5); ctx.lineTo(x + W * 0.17, -stone * 0.78);
+    ctx.lineTo(x - W * 0.17, -stone * 0.78); ctx.lineTo(x - W * 0.2, -stone * 0.5);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = "#3a2a1c";
+  ctx.fillRect(-W * 0.06, -stone * 0.85, W * 0.12, stone * 0.85);
+  ctx.fillStyle = glow;
+  ctx.fillRect(-W * 0.04, -stone * 0.8, W * 0.08, stone * 0.7);
+  ctx.fillStyle = "#2b2f33";
+  ctx.fillRect(-W * 0.52, -stone - awning, W * 1.04, awning);
+  // Shingled mansard with the sign.
+  ctx.fillStyle = "#5b6168";
+  ctx.beginPath();
+  ctx.moveTo(-W * 0.52, -stone - awning); ctx.lineTo(W * 0.52, -stone - awning);
+  ctx.lineTo(W * 0.43, -mansardTop); ctx.lineTo(-W * 0.43, -mansardTop);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(0, 0, 0, .18)";
+  ctx.lineWidth = 1;
+  for (let y = -stone - awning - 4; y > -mansardTop; y -= 4) {
+    ctx.beginPath(); ctx.moveTo(-W * 0.5, y); ctx.lineTo(W * 0.5, y); ctx.stroke();
+  }
+  // Gable with a small window.
+  ctx.fillStyle = "#c9cfd4";
+  ctx.beginPath();
+  ctx.moveTo(-W * 0.24, -mansardTop); ctx.lineTo(W * 0.24, -mansardTop); ctx.lineTo(0, -H);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#eef3f5";
+  ctx.fillRect(-W * 0.05, -mansardTop - H * 0.12, W * 0.1, H * 0.09);
+  if (progress === 0) drawSuviosSign(ctx, 0, -(stone + awning + mansardTop) / 2, W);
+}
+
+function drawSuviosSign(ctx, x, y, W, angle = 0) {
+  const signW = W * 0.62, signH = W * 0.17;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = "#e7d6b8";
+  ctx.strokeStyle = "#8a6a45";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(-signW / 2, -signH / 2, signW, signH, 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#4a2f1c";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.max(6, signH * 0.62)}px Georgia, serif`;
+  ctx.fillText("SUVIO'S", 0, signH * 0.02, signW - 4);
+  ctx.restore();
+}
+
+function drawMorristownHigh(ctx, W, H, progress) {
+  const body = H * 0.72;
+  ctx.fillStyle = "#a5442e";
+  ctx.fillRect(-W / 2, -body, W, body);
+  ctx.strokeStyle = "rgba(240, 225, 210, .25)";
+  ctx.lineWidth = 0.6;
+  for (let y = -3; y > -body; y -= 3) { ctx.beginPath(); ctx.moveTo(-W / 2, y); ctx.lineTo(W / 2, y); ctx.stroke(); }
+  // Cornice, two rows of windows, and a white columned entrance.
+  ctx.fillStyle = "#f2efe6";
+  ctx.fillRect(-W * 0.53, -body - H * 0.05, W * 1.06, H * 0.05);
+  ctx.fillStyle = progress > 0 ? "#9fb0b8" : "#dbe8ef";
+  for (const row of [0.3, 0.68]) for (let i = 0; i < 6; i++) {
+    const x = -W * 0.45 + i * W * 0.18;
+    if (Math.abs(x + W * 0.04) < W * 0.12) continue;
+    ctx.fillRect(x, -body * row - H * 0.1, W * 0.08, H * 0.13);
+  }
+  ctx.fillStyle = "#f2efe6";
+  ctx.beginPath();
+  ctx.moveTo(-W * 0.16, -body * 0.86); ctx.lineTo(W * 0.16, -body * 0.86); ctx.lineTo(0, -H);
+  ctx.closePath(); ctx.fill();
+  for (let i = 0; i < 4; i++) ctx.fillRect(-W * 0.13 + i * W * 0.08, -body * 0.86, W * 0.035, body * 0.86);
+  ctx.fillStyle = "#3a2a1c";
+  ctx.fillRect(-W * 0.035, -body * 0.32, W * 0.07, body * 0.32);
+  if (progress === 0) {
+    ctx.fillStyle = "#1f3b5c";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${Math.max(5, H * 0.07)}px system-ui`;
+    ctx.fillText("MORRISTOWN HIGH", 0, -body - H * 0.025, W);
+    // Flagpole with a little waving flag.
+    ctx.strokeStyle = "#5c6670";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(W * 0.46, -body - H * 0.05); ctx.lineTo(W * 0.46, -H * 1.12); ctx.stroke();
+    ctx.fillStyle = "#c0392b";
+    ctx.fillRect(W * 0.46, -H * 1.12, W * 0.1, H * 0.07);
+  }
+}
+
+// Dust, a rubble pile, and each landmark's own punchline.
+function drawLandmarkRubble(ctx, kind, W, H, progress, fall) {
+  const pileH = H * 0.24 * Math.min(1, progress * 1.4);
+  ctx.fillStyle = kind === "suvios" ? "#6f6a64" : "#8e3b28";
+  ctx.beginPath();
+  ctx.moveTo(-W * 0.62, 0);
+  for (let i = 0; i <= 8; i++) ctx.lineTo(-W * 0.55 + i * W * 0.1375, -pileH * (0.55 + 0.45 * Math.abs(Math.sin(i * 1.7))));
+  ctx.lineTo(W * 0.62, 0);
+  ctx.closePath();
+  ctx.fill();
+  const dust = Math.sin(Math.min(1, progress * 1.2) * Math.PI);
+  ctx.fillStyle = `rgba(150, 132, 118, ${0.45 * dust})`;
+  for (let i = 0; i < 7; i++) {
+    ctx.beginPath();
+    ctx.arc(-W * 0.6 + i * W * 0.2, -H * 0.1 - (i % 3) * H * 0.08, W * (0.12 + 0.1 * progress) + (i % 2) * 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (kind === "suvios") {
+    // The sign drops onto the pile while a pizza spins out and lands on top.
+    drawSuviosSign(ctx, -W * 0.12, -H * 0.62 * (1 - fall) - pileH * 0.9 * fall, W * 0.85, -0.35 * fall);
+    const px = W * 0.55 * progress, py = -H * 0.9 * Math.sin(progress * Math.PI) - pileH * progress - H * 0.25 * (1 - progress);
+    drawPizza(ctx, px, py, W * 0.11, progress * Math.PI * 5);
+  } else if (progress > 0.6) {
+    const pop = Math.min(1, (progress - 0.6) / 0.25);
+    ctx.save();
+    ctx.translate(W * 0.08, -pileH);
+    ctx.scale(pop, pop);
+    ctx.fillStyle = "#5c4a3a";
+    ctx.fillRect(-1, -H * 0.3, 2, H * 0.3);
+    ctx.fillStyle = "#fffdf6";
+    ctx.strokeStyle = "#c0392b";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(-W * 0.33, -H * 0.52, W * 0.66, H * 0.24, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#c0392b";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${Math.max(6, H * 0.11)}px system-ui`;
+    ctx.fillText("SCHOOL'S OUT!", 0, -H * 0.4, W * 0.62);
+    ctx.restore();
+  }
+}
+
+function drawPizza(ctx, x, y, r, spin) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(spin);
+  ctx.fillStyle = "#d9a441";
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#f4d06f";
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#b8342a";
+  for (let i = 0; i < 5; i++) {
+    const a = i * Math.PI * 2 / 5;
+    ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.45, Math.sin(a) * r * 0.45, r * 0.16, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
 function renderCity() {
   const canvas = $("cityCanvas");
   const ctx = canvas.getContext("2d");
@@ -1238,7 +1436,7 @@ function renderCity() {
     cityStart = performance.now() - (Date.now() - pulse.startedAt);
     lastCityStartedAt = pulse.startedAt;
   }
-  $("cityCaption").textContent = `Room ${currentRoom.code}: ${roomScenarioText(currentRoom.config)} - same settings for every tower.`;
+  $("cityCaption").textContent = `Room ${currentRoom.code}: ${roomScenarioText(currentRoom.config)} - same settings for every building.`;
   $("quakeBadge").textContent = pulse ? `${DIFFICULTY[pulse.difficulty]?.label || "Medium"}: ${fmt(pulse.amplitude)} m` : "Waiting";
   const skipped = canSkipCityResults() && skippedCityQuake?.code === currentRoom.code && skippedCityQuake?.startedAt === pulse?.startedAt;
   const t = currentRoom.phase === "running" ? skipped ? (pulse?.runDuration || RUN_DURATION) + 3.6
@@ -1266,8 +1464,16 @@ function renderCity() {
     $("cityCaption").textContent = `Room ${currentRoom.code}: ${finished ? "the dust has settled." : t < pulse.duration ? "Hold on! The earthquake has reached the city." : "Watch which designs survive."}`;
   }
   const aftermath = running && t >= (pulse.runDuration || RUN_DURATION) + 3.6;
-  const cell = w / Math.max(1, students.length);
-  students.forEach((s, i) => {
+  const landmark = cityLandmark(pulse?.id || currentRoom.code, students.length);
+  const cell = w / (students.length + 1);
+  const landmarkX = cell * landmark.slot + cell / 2;
+  drawCityLandmark(ctx, landmark.kind, landmarkX, h - 48, Math.min(cell * 0.85, 110), t, running ? pulse : null, aftermath);
+  ctx.fillStyle = "#17212b";
+  ctx.font = "12px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillText(LANDMARKS[landmark.kind].label, landmarkX, h - 14, Math.max(1, cell - 8));
+  students.forEach((s, index) => {
+    const i = index < landmark.slot ? index : index + 1;
     const result = s.result;
     const sampleTime = result?.failureTime != null ? Math.min(t, result.failureTime) : t;
     const terminal = cityFinalSample(result);
@@ -1338,7 +1544,7 @@ function renderLeaderboards(results, pulse) {
   }
   const survivors = results.filter(r => r.result.status !== "failed");
   const fallen = results.filter(r => r.result.status === "failed");
-  $("survivorBanner").innerHTML = `<strong>🏙️ ${survivors.length} of ${results.length} towers survived!</strong>${fallen.length ? `<span>Collapsed: ${fallen.map(r => escapeHtml(r.nickname)).join(", ")}</span>` : ""}`;
+  $("survivorBanner").innerHTML = `<strong>🏙️ ${survivors.length} of ${results.length} buildings survived!</strong>${fallen.length ? `<span>Collapsed: ${fallen.map(r => escapeHtml(r.nickname)).join(", ")}</span>` : ""}`;
   const dangerOn = pulse?.dangerEnabled !== false;
   // Values are rounded to what is displayed so visible ties share a place.
   const round = (v, digits) => Number(v.toFixed(digits));
@@ -1347,7 +1553,7 @@ function renderLeaderboards(results, pulse) {
     dangerOn
       ? { title: "Least time in danger zone", note: "Must survive", value: r => round(r.result.overLimitTime || 0, 2), show: v => `${fmt(v, 2)} s` }
       : { title: "Least peak sway", note: "No danger zone on Easy", value: r => round(r.result.peakSway, 2), show: v => `${fmt(v, 2)} m` },
-    { title: "Lightest TMD", note: "Mass as % of tower, must survive", value: r => round(r.submission.massRatio * 100, 1), show: v => `${fmt(v, 1)}%`, needsTmd: true },
+    { title: "Lightest TMD", note: "Mass as % of building, must survive", value: r => round(r.submission.massRatio * 100, 1), show: v => `${fmt(v, 1)}%`, needsTmd: true },
     { title: "Least damping", note: "Must survive", value: r => round(r.submission.damping, 2), show: v => fmt(v, 2), needsTmd: true }
   ];
   const medals = ["🥇", "🥈", "🥉"];
@@ -1642,7 +1848,7 @@ $("joinForm").addEventListener("submit", async event => {
     // A rejected rename leaves the group joined under its old name.
     if (token) return;
     currentStudent = null;
-    $("studentTower").textContent = "Join a room to receive a tower.";
+    $("studentTower").textContent = "Join a room to receive a building.";
   }
 
 });
@@ -1767,7 +1973,7 @@ $("roster").addEventListener("click", async event => {
   const button = event.target.closest("button[data-student-id]");
   if (!button || button.disabled || !teacherUnlocked || !currentRoom) return;
   const student = currentRoom.students.find(s => s.id === button.dataset.studentId);
-  if (!student || !window.confirm(`Remove ${student.nickname} from room ${currentRoom.code}? Their tower, submitted design, and results will be deleted.`)) return;
+  if (!student || !window.confirm(`Remove ${student.nickname} from room ${currentRoom.code}? Their building, submitted design, and results will be deleted.`)) return;
   button.disabled = true;
   try {
     currentRoom = await api(`/api/rooms/${currentRoom.code}/remove-student`, { studentId: student.id });

@@ -521,7 +521,8 @@ for (const count of [1, 12]) for (const height of [170, 350]) for (const theta o
     }))
   }; renderCity()`, app);
   const commands = dom.cityCanvas.ctx.drawings;
-  const displayScale = Math.min(.3, 1100 / count / 420);
+  // One extra skyline slot holds the local landmark.
+  const displayScale = Math.min(.3, 1100 / (count + 1) / 420);
   const rods = commands.map((command, index) => ({ ...command, index })).filter(d => d.method === "stroke" && d.width === 2 && d.color === "#1e2d36");
   assert.equal(rods.length, count);
   for (const rod of rods) {
@@ -613,7 +614,16 @@ vm.runInContext(`currentRoom.students = [ { ...currentRoom.students[0], result: 
 dom.cityCanvas.ctx.drawings.length = 0;
 vm.runInContext("renderCity()", app);
 assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "fillRect" && ["#723a37", "#c4d4da", "#9d7970", "#0f7b7e"].includes(d.fillColor)).length, 56, "late failures finish with all rubble fragments before the clock stops");
-const failureScales = dom.cityCanvas.ctx.drawings.filter(d => d.method === "scale");
+{
+  // Every screen draws the same landmark in the same slot for a quake, and both appear across quakes.
+  const picks = Array.from({ length: 40 }, (_, i) => vm.runInContext(`cityLandmark("quake-${i}", 12)`, app));
+  assert.deepEqual(vm.runInContext('cityLandmark("quake-7", 12)', app), picks[7], "the landmark choice is deterministic for a quake");
+  assert(picks.some(p => p.kind === "suvios") && picks.some(p => p.kind === "mhs"), "both landmarks appear across quakes");
+  assert(picks.every(p => p.slot >= 0 && p.slot <= 12), "the landmark takes one of the skyline slots");
+}
+// Skip the landmark, which squashes on purpose; check the group building drawn after its label.
+const landmarkLabel = dom.cityCanvas.ctx.drawings.findIndex(d => d.method === "fillText" && /Suvio|Morristown/.test(d.args[0]));
+const failureScales = dom.cityCanvas.ctx.drawings.slice(landmarkLabel + 1).filter(d => d.method === "scale");
 assert(Math.abs(failureScales[0].args[0] * failureScales.at(-1).args[0] - failureScales[0].args[1] * failureScales.at(-1).args[1]) < 1e-9, "FAILED text has equal horizontal and vertical scales in City");
 dom.cityCanvas.ctx.drawings.length = 0;
 vm.runInContext("currentRoom.students[0].result.failureTime = 21; renderCity()", app);
@@ -1015,7 +1025,7 @@ for (const damping of [0, .25, 1]) {
   assert.deepEqual(Array.from(board, row => row.place), [1, 1, 3, null, null, null], "only eligible survivors receive places, with ties preserved");
   assert.equal(board.find(row => row.r.nickname === "Early fall").kind, "failed", "the lowest damping cannot win if the tower collapsed");
   vm.runInContext("renderLeaderboards", app)(boardResults, { dangerEnabled: true });
-  assert(dom.survivorBanner.innerHTML.includes("4 of 6 towers survived") && dom.survivorBanner.innerHTML.includes("Late fall"), "banner counts survivors and names collapses");
+  assert(dom.survivorBanner.innerHTML.includes("4 of 6 buildings survived") && dom.survivorBanner.innerHTML.includes("Late fall"), "banner counts survivors and names collapses");
   const boards = dom.leaderboards.innerHTML.split('<section class="leaderboard">').slice(1);
   const fallenRow = board => board.match(/<li class="board-failed">.*?Late fall.*?<\/li>/)[0];
   assert(boards[1].includes("Least time in danger zone"));

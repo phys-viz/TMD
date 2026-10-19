@@ -97,7 +97,7 @@
     const stiffness = mass * omega * omega;
     const damping = 2 * dampingRatio * Math.sqrt(stiffness * mass);
     const tower = {
-      name: `Tower ${index + 1}`,
+      name: `Building ${index + 1}`,
       height: Math.round(170 + r() * 180),
       period,
       mass,
@@ -113,7 +113,7 @@
     const height = Math.round(labTowerLimits.minHeight + random() * (labTowerLimits.maxHeight - labTowerLimits.minHeight));
     // Match the precision students can enter in Solo Lab: whole meters and 0.1 million kg.
     const mass = Math.round((labTowerLimits.minMass + random() * (labTowerLimits.maxMass - labTowerLimits.minMass)) / 1e5) * 1e5;
-    return { ...createLabTower(height, mass), name: `Tower ${index + 1}` };
+    return { ...createLabTower(height, mass), name: `Building ${index + 1}` };
   }
 
   function createLabTower(height, mass) {
@@ -129,7 +129,7 @@
     const dampingRatio = 0.005;
     const stiffness = cleanMass * Math.pow(2 * Math.PI / period, 2);
     const tower = {
-      name: "Lab tower",
+      name: "Lab building",
       height: cleanHeight,
       mass: cleanMass,
       period,
