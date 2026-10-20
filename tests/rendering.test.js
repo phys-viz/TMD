@@ -622,7 +622,7 @@ assert.equal(dom.cityCanvas.ctx.drawings.filter(d => d.method === "fillRect" && 
   assert(picks.every(p => p.slot >= 0 && p.slot <= 12), "the landmark takes one of the skyline slots");
 }
 // Skip the landmark, which squashes on purpose; check the group building drawn after its label.
-const landmarkLabel = dom.cityCanvas.ctx.drawings.findIndex(d => d.method === "fillText" && /Suvio|Morristown/.test(d.args[0]));
+const landmarkLabel = dom.cityCanvas.ctx.drawings.findIndex(d => d.method === "fillText" && /Suvio|MHS/.test(d.args[0]));
 const failureScales = dom.cityCanvas.ctx.drawings.slice(landmarkLabel + 1).filter(d => d.method === "scale");
 assert(Math.abs(failureScales[0].args[0] * failureScales.at(-1).args[0] - failureScales[0].args[1] * failureScales.at(-1).args[1]) < 1e-9, "FAILED text has equal horizontal and vertical scales in City");
 dom.cityCanvas.ctx.drawings.length = 0;

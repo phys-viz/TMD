@@ -1225,7 +1225,7 @@ function canSkipCityResults() {
 const LANDMARK_COLLAPSE_TIME = 5;
 const LANDMARKS = {
   suvios: { label: "Suvio's 🍕", aspect: 0.78 },
-  mhs: { label: "Morristown High 🏫", aspect: 0.62 }
+  mhs: { label: "MHS", aspect: 0.6 }
 };
 
 // Every screen picks the same landmark and slot from the shared quake ID.
@@ -1322,48 +1322,87 @@ function drawSuviosSign(ctx, x, y, W, angle = 0) {
   ctx.restore();
 }
 
+// Cream stone school with a green cornice, a raised centre entrance with an
+// MHS plaque, three rows of dark-framed windows, and maroon flags.
 function drawMorristownHigh(ctx, W, H, progress) {
-  const body = H * 0.72;
-  ctx.fillStyle = "#a5442e";
-  ctx.fillRect(-W / 2, -body, W, body);
-  ctx.strokeStyle = "rgba(240, 225, 210, .25)";
-  ctx.lineWidth = 0.6;
-  for (let y = -3; y > -body; y -= 3) { ctx.beginPath(); ctx.moveTo(-W / 2, y); ctx.lineTo(W / 2, y); ctx.stroke(); }
-  // Cornice, two rows of windows, and a white columned entrance.
-  ctx.fillStyle = "#f2efe6";
-  ctx.fillRect(-W * 0.53, -body - H * 0.05, W * 1.06, H * 0.05);
-  ctx.fillStyle = progress > 0 ? "#9fb0b8" : "#dbe8ef";
-  for (const row of [0.3, 0.68]) for (let i = 0; i < 6; i++) {
-    const x = -W * 0.45 + i * W * 0.18;
-    if (Math.abs(x + W * 0.04) < W * 0.12) continue;
-    ctx.fillRect(x, -body * row - H * 0.1, W * 0.08, H * 0.13);
+  const stone = "#e3d7c1", light = "#ece3d1", trim = "#4f7d6c", frame = "#3b3530";
+  const pane = progress > 0 ? "#7d8c93" : "#a9bfca";
+  const wingTop = H * 0.7, pavilionW = W * 0.34, pavilionTop = H * 0.8;
+  ctx.fillStyle = stone;
+  ctx.fillRect(-W / 2, -wingTop, W, wingTop);
+  ctx.fillStyle = trim;
+  ctx.fillRect(-W * 0.51, -wingTop - H * 0.04, W * 1.02, H * 0.04);
+  ctx.fillStyle = stone;
+  ctx.fillRect(-W / 2, -wingTop - H * 0.08, W, H * 0.04);
+  ctx.fillStyle = "#cdbfa5";
+  ctx.fillRect(-W / 2, -H * 0.12, W, H * 0.12);
+  // Three bays of windows on each wing: a short basement row and two tall floors.
+  const bayW = (W / 2 - pavilionW / 2) / 3;
+  const rows = [[0.03, 0.09], [0.17, 0.41], [0.46, 0.66]];
+  for (const side of [-1, 1]) for (let bay = 0; bay < 3; bay++) {
+    const x = side * (pavilionW / 2 + (bay + 0.5) * bayW);
+    ctx.fillStyle = light;
+    ctx.fillRect(side * (pavilionW / 2 + bay * bayW) - (side < 0 ? 1.5 : 0), -wingTop, 1.5, wingTop);
+    for (const [low, high] of rows) drawSchoolWindow(ctx, x, -H * high, bayW * 0.74, H * (high - low), frame, pane);
   }
-  ctx.fillStyle = "#f2efe6";
-  ctx.beginPath();
-  ctx.moveTo(-W * 0.16, -body * 0.86); ctx.lineTo(W * 0.16, -body * 0.86); ctx.lineTo(0, -H);
-  ctx.closePath(); ctx.fill();
-  for (let i = 0; i < 4; i++) ctx.fillRect(-W * 0.13 + i * W * 0.08, -body * 0.86, W * 0.035, body * 0.86);
-  ctx.fillStyle = "#3a2a1c";
-  ctx.fillRect(-W * 0.035, -body * 0.32, W * 0.07, body * 0.32);
+  // Raised centre entrance with its own cornice and the MHS plaque.
+  ctx.fillStyle = light;
+  ctx.fillRect(-pavilionW / 2, -pavilionTop, pavilionW, pavilionTop);
+  ctx.fillStyle = trim;
+  ctx.fillRect(-pavilionW * 0.54, -pavilionTop - H * 0.04, pavilionW * 1.08, H * 0.04);
+  const plaqueW = pavilionW * 0.94, plaqueH = H * 0.17;
+  ctx.fillStyle = light;
+  ctx.fillRect(-plaqueW / 2, -pavilionTop - H * 0.04 - plaqueH, plaqueW, plaqueH);
+  ctx.fillStyle = trim;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.max(7, Math.min(plaqueH * 0.95, plaqueW / 2.3))}px Georgia, serif`;
+  if (progress < 0.5) ctx.fillText("MHS", 0, -pavilionTop - H * 0.04 - plaqueH * 0.45, plaqueW);
+  drawSchoolWindow(ctx, 0, -H * 0.66, pavilionW * 0.36, H * 0.16, frame, pane);
+  drawSchoolWindow(ctx, 0, -H * 0.44, pavilionW * 0.36, H * 0.14, frame, pane);
+  ctx.fillStyle = "#cdbfa5";
+  ctx.fillRect(-pavilionW * 0.3, -H * 0.27, pavilionW * 0.6, H * 0.27);
+  ctx.fillStyle = "#24324a";
+  ctx.fillRect(-pavilionW * 0.2, -H * 0.23, pavilionW * 0.4, H * 0.23);
   if (progress === 0) {
-    ctx.fillStyle = "#1f3b5c";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `bold ${Math.max(5, H * 0.07)}px system-ui`;
-    ctx.fillText("MORRISTOWN HIGH", 0, -body - H * 0.025, W);
-    // Flagpole with a little waving flag.
-    ctx.strokeStyle = "#5c6670";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(W * 0.46, -body - H * 0.05); ctx.lineTo(W * 0.46, -H * 1.12); ctx.stroke();
-    ctx.fillStyle = "#c0392b";
-    ctx.fillRect(W * 0.46, -H * 1.12, W * 0.1, H * 0.07);
+    for (const side of [-1, 1]) {
+      // Evergreen shrub beside the door.
+      ctx.fillStyle = "#2f5a3a";
+      ctx.beginPath();
+      ctx.moveTo(side * pavilionW * 0.34, 0); ctx.lineTo(side * pavilionW * 0.52, 0);
+      ctx.lineTo(side * pavilionW * 0.43, -H * 0.18);
+      ctx.closePath(); ctx.fill();
+      // A short angled pole at the entrance edge with a small hanging maroon flag.
+      const baseX = side * pavilionW * 0.5, baseY = -H * 0.42;
+      const tipX = side * pavilionW * 0.78, tipY = -H * 0.56;
+      ctx.strokeStyle = "#6b6b6b";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(tipX, tipY); ctx.stroke();
+      ctx.fillStyle = "#8a1f2b";
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY); ctx.lineTo(tipX - side * W * 0.065, tipY + H * 0.03);
+      ctx.lineTo(tipX - side * W * 0.06, tipY + H * 0.11); ctx.lineTo(tipX + side * W * 0.004, tipY + H * 0.08);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+function drawSchoolWindow(ctx, x, top, width, height, frame, pane) {
+  ctx.fillStyle = frame;
+  ctx.fillRect(x - width / 2, top, width, height);
+  ctx.fillStyle = pane;
+  ctx.fillRect(x - width / 2 + 0.8, top + 0.8, width - 1.6, height - 1.6);
+  if (width > 5 && height > 5) {
+    ctx.fillStyle = frame;
+    ctx.fillRect(x - 0.4, top, 0.8, height);
+    ctx.fillRect(x - width / 2, top + height * 0.5 - 0.4, width, 0.8);
   }
 }
 
 // Dust, a rubble pile, and each landmark's own punchline.
 function drawLandmarkRubble(ctx, kind, W, H, progress, fall) {
   const pileH = H * 0.24 * Math.min(1, progress * 1.4);
-  ctx.fillStyle = kind === "suvios" ? "#6f6a64" : "#8e3b28";
+  ctx.fillStyle = kind === "suvios" ? "#6f6a64" : "#cbbfa7";
   ctx.beginPath();
   ctx.moveTo(-W * 0.62, 0);
   for (let i = 0; i <= 8; i++) ctx.lineTo(-W * 0.55 + i * W * 0.1375, -pileH * (0.55 + 0.45 * Math.abs(Math.sin(i * 1.7))));
